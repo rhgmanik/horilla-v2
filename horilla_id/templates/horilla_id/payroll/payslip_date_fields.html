@@ -1,0 +1,16 @@
+{% load i18n %}
+<div class="row" id="payslipDateFields">
+  <div class="col-12 col-sm-12 col-md-6 col-lg-6">
+    <div class="oh-input__group">
+      <label class="oh-input__label" for="id_start_date">{% trans "Start Date" %}</label>
+      <input type="date" name="start_date" class="oh-input w-100" id="id_start_date" value="{{ start_date|date:'Y-m-d' }}">
+    </div>
+  </div>
+  <div class="col-12 col-sm-12 col-md-6 col-lg-6">
+    <div class="oh-input__group">
+      <label class="oh-input__label" for="id_end_date">{% trans "End Date" %}</label>
+      <input type="date" name="end_date" class="oh-input w-100" id="id_end_date" value="{{ end_date|date:'Y-m-d' }}">
+    </div>
+  </div>
+</div>
+

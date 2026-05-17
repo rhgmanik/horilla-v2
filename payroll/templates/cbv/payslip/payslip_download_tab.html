@@ -1,0 +1,4 @@
+{% load i18n %}
+<a href="{% url 'view-payslip-pdf' instance.id %}?print=1" target="_blank" class="oh-btn oh-btn--light-bkg w-100" title="{% trans 'Download' %}">
+  <ion-icon name="download"></ion-icon>
+</a>

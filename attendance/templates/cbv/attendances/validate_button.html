@@ -1,0 +1,19 @@
+{% load i18n basefilters %}
+{% is_manager_of request.user instance as can_manage %}
+{% if perms.attendance.change_attendance or can_manage %}
+    {% if instance.is_validate_request %}
+    <a href="#"
+        class="oh-btn oh-btn--info"
+        onclick="event.preventDefault(); event.stopPropagation(); showApproveAlert($(this).data('req'));"
+        data-req="/attendance/request-attendance-view/?id={{ instance.id }}">
+        {% trans "Validate" %}
+    </a>
+    {% else %}
+        <a hx-get="{% url 'validate-this-attendance' instance.id %}"
+            hx-swap="none"
+            onclick="event.preventDefault(); event.stopPropagation();"
+            class="oh-btn oh-btn--info">
+            {% trans "Validate" %}
+        </a>
+    {% endif %}
+{% endif %}

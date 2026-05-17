@@ -1,0 +1,89 @@
+{% load i18n horilla_id_tags %}
+<style>
+	.oh-info {
+		top: 0px !important;
+	}
+</style>
+<div class="col-span-12">
+	<form action="{% url 'payroll-settings' %}" method="post"
+		hx-post="{% url 'payroll-settings' %}"
+		hx-target="#settingsContainer"
+		hx-select="#settingsContainer"
+		hx-swap="outerHTML show:none">
+		{% csrf_token %}
+
+		<div class="flex align-center gap-2">
+			<div class="w-full">
+				<label>{% trans "Currency Symbol" %}</label>
+				<input
+					type="text"
+					name="currency_symbol"
+					value="{{currency_form.instance.currency_symbol}}"
+					maxlength="5"
+					placeholder="Currency Symbol"
+					required=""
+					id="id_currency_symbol"
+				/>
+			</div>
+			<div class="w-full">
+				<label> {% trans "Position" %}</label>
+				{{ currency_form.position }}
+			</div>
+			<div class="w-full">
+				<label>{% trans "Company" %}</label>
+				<select name="company_id" id="id_company_id">
+					{% for company in companies %}
+					<option
+						value="{{ company.id }}"
+						{%
+						if
+						company.id=""
+						="selected_company_id"
+						%}selected{%
+						endif
+						%}
+					>
+						{{ company.company }}
+					</option>
+					{% endfor %}
+				</select>
+			</div>
+			<button class="h-[36px] btn mt-[23px] mb-[10px]" type="submit">
+				{% trans 'Save Changes' %}
+			</button>
+		</div>
+	</form>
+</div>
+
+{% payroll_period_setting as period_setting %}
+<div class="col-span-12">
+	<form action="{% url 'horilla-id-payroll-period-setting' %}" method="post"
+		hx-post="{% url 'horilla-id-payroll-period-setting' %}"
+		hx-swap="none"
+		hx-on-htmx-after-request="setTimeout(() => { reloadMessage(); }, 100);">
+		{% csrf_token %}
+		<div class="flex align-center gap-2">
+			<div class="w-full">
+				<label>{% trans "Payroll Period Type" %}</label>
+				<select name="payroll_period_type" id="id_payroll_period_type">
+					<option value="calendar_month" {% if period_setting.payroll_period_type == "calendar_month" %}selected{% endif %}>{% trans "Calendar Month (1-last)" %}</option>
+					<option value="custom_cutoff" {% if period_setting.payroll_period_type == "custom_cutoff" %}selected{% endif %}>{% trans "Custom Cutoff (e.g., 21-20)" %}</option>
+				</select>
+			</div>
+			<div class="w-full">
+				<label>{% trans "Cutoff Day" %}</label>
+				<input type="number" name="cutoff_day" id="id_cutoff_day" min="1" max="31" value="{{ period_setting.cutoff_day|default:20 }}">
+			</div>
+			<div class="w-full">
+				<label>{% trans "Monthly Salary Mode" %}</label>
+				<select name="monthly_salary_mode" id="id_monthly_salary_mode">
+					<option value="prorate_by_calendar_month" {% if period_setting.monthly_salary_mode == "prorate_by_calendar_month" %}selected{% endif %}>{% trans "Prorate by Calendar Month" %}</option>
+					<option value="full_period_as_one_month" {% if period_setting.monthly_salary_mode == "full_period_as_one_month" %}selected{% endif %}>{% trans "Full Period as One Payroll Month" %}</option>
+				</select>
+			</div>
+			<button class="h-[36px] btn mt-[23px] mb-[10px]" type="submit">
+				{% trans 'Save Changes' %}
+			</button>
+		</div>
+	</form>
+</div>

@@ -1,0 +1,50 @@
+{% load i18n %}
+<div class="oh-card oh-card--margin" id="indonesiaTabCard">
+  <div class="oh-card__header">
+    <span class="oh-card__title oh-card__title--sm fw-bold me-2">
+      {% trans "Identity & Insurance (Indonesian)" %}
+    </span>
+  </div>
+  <div class="oh-card__body mt-4">
+    <form method="post" hx-post="." hx-target="#indonesiaTabCard" hx-swap="outerHTML">
+      {% csrf_token %}
+      <div class="row">
+        <div class="col-12 col-sm-12 col-md-6 col-lg-6">
+          <div class="oh-input__group">
+            <label class="oh-input__label" for="{{ form.npwp.id_for_label }}">{% trans "NPWP" %}</label>
+            {{ form.npwp }}
+            {{ form.npwp.errors }}
+          </div>
+        </div>
+        <div class="col-12 col-sm-12 col-md-6 col-lg-6">
+          <div class="oh-input__group">
+            <label class="oh-input__label" for="{{ form.nik.id_for_label }}">{% trans "NIK (KTP/Paspor)" %}</label>
+            {{ form.nik }}
+            {{ form.nik.errors }}
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-12 col-sm-12 col-md-6 col-lg-6">
+          <div class="oh-input__group">
+            <label class="oh-input__label" for="{{ form.bpjs_kesehatan.id_for_label }}">{% trans "BPJS Kesehatan" %}</label>
+            {{ form.bpjs_kesehatan }}
+            {{ form.bpjs_kesehatan.errors }}
+          </div>
+        </div>
+        <div class="col-12 col-sm-12 col-md-6 col-lg-6">
+          <div class="oh-input__group">
+            <label class="oh-input__label" for="{{ form.bpjs_ketenagakerjaan.id_for_label }}">{% trans "BPJS Ketenagakerjaan" %}</label>
+            {{ form.bpjs_ketenagakerjaan }}
+            {{ form.bpjs_ketenagakerjaan.errors }}
+          </div>
+        </div>
+      </div>
+      {% if can_edit %}
+        <div class="d-flex justify-content-end">
+          <button type="submit" class="oh-btn oh-btn--secondary">{% trans "Save Changes" %}</button>
+        </div>
+      {% endif %}
+    </form>
+  </div>
+</div>

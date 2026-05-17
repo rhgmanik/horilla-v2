@@ -1,0 +1,69 @@
+{% extends 'settings.html' %}
+{% load static i18n %}
+
+{% block settings %}
+<style>
+	.alert {
+		position: relative;
+		padding: 0.75rem 1.25rem;
+		margin-bottom: 1rem;
+		border: 1px solid transparent;
+		border-radius: 0.25rem;
+	}
+
+	.alert-warning {
+		color: #856404;
+		background-color: #fff3cd;
+		border-color: #ffeeba;
+		display: flex;
+		align-items: center;
+		gap: 20px;
+	}
+</style>
+{% include "generic/components.html" %}
+<div class="oh-inner-sidebar-content">
+	{% if perms.base.view_dynamicemailconfiguration %}
+		{% comment %} <div class="oh-inner-sidebar-content__header d-flex justify-content-between align-items-center">
+			<h2 class="oh-inner-sidebar-content__title">{% trans "Mail Servers" %}</h2>
+			{% if perms.base.add_dynamicemailconfiguration %}
+				<button class="oh-btn oh-btn--secondary oh-btn--shadow" data-toggle="oh-modal-toggle"
+					data-target="#objectCreateModal" hx-get="{% url 'mail-server-create-update' %}"
+					hx-target="#objectCreateModalTarget">
+					<ion-icon name="add-outline" class="me-1"></ion-icon>
+					{% trans "Create" %}
+				</button>
+			{% endif %}
+		</div> {% endcomment %}
+
+		<div hx-get="{% url 'mail-server-nav' %}" hx-trigger="load"></div>
+
+        <div class="oh-checkpoint-badge mb-2" id="selectedInstances" data-ids="[]" data-clicked="" style="display: none"></div>
+        <div class="oh-wrapper" id="listContainer">
+            <div class="animated-background"></div>
+        </div>
+
+		{% comment %} {% if mail_servers %}
+			{% include 'base/mail_server/mail_server_view.html' %}
+		{% else %}
+			<div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%;">
+				<img style="display: block; width: 15%; margin: 20px auto; filter: opacity(0.5);"
+					src="{% static 'images/ui/email.png' %}" class="" alt="Page not found. 404." />
+				<h5 class="oh-404__subtitle">{% trans "There is no mail server at this moment." %}</h5>
+			</div>
+		{% endif %} {% endcomment %}
+	{% endif %}
+</div>
+
+<div class="oh-modal" id="mailServerModal" role="dialog" aria-labelledby="mailServerModal" aria-hidden="true">
+	<div class="oh-modal__dialog">
+		<div class="oh-modal__dialog-header">
+
+			<button class="oh-modal__close" aria-label="Close">
+				<ion-icon name="close-outline"></ion-icon>
+			</button>
+		</div>
+		<div class="oh-modal__dialog-body" id="mailServerModalBody"></div>
+	</div>
+</div>
+
+{% endblock settings %}
