@@ -6,17 +6,47 @@ $(document).ready(function () {
   var departmentLeaveChart;
   var leaveTypeChart;
   var leavePeriodChart;
-  var myChart2 = document.getElementById("employeeLeave");
-  var employeeLeaveChart = new Chart(myChart2, {
-    type: "bar",
-    data: {
-      labels: [],
-      datasets: [],
-    },
-  });
+  function getCanvas(id) {
+    var el = document.getElementById(id);
+    if (!el) return null;
+    if (!el.tagName || el.tagName.toLowerCase() !== "canvas") return null;
+    return el;
+  }
+
+  function getThemedOptions() {
+    if (window.ChartTheme && typeof ChartTheme.getThemedOptions === "function") {
+      return ChartTheme.getThemedOptions();
+    }
+    return { plugins: {}, scales: { x: {}, y: {} } };
+  }
+
+  function getTickColor() {
+    if (window.ChartTheme && typeof ChartTheme.getColors === "function") {
+      return ChartTheme.getColors().tickColor;
+    }
+    return "#000";
+  }
+
+  function observeChart(name) {
+    if (window.ChartTheme && typeof ChartTheme.observe === "function") {
+      ChartTheme.observe(name);
+    }
+  }
+
+  var employeeLeaveChart = null;
+  var myChart2 = getCanvas("employeeLeave");
+  if (myChart2) {
+    employeeLeaveChart = new Chart(myChart2, {
+      type: "bar",
+      data: {
+        labels: [],
+        datasets: [],
+      },
+    });
+  }
   var start_index = 0;
   var per_page = 10;
-  const themedOptions = ChartTheme.getThemedOptions();
+  const themedOptions = getThemedOptions();
 
   month = ("0" + (today.getMonth() + 1)).slice(-2);
   year = today.getFullYear();
@@ -40,7 +70,13 @@ $(document).ready(function () {
 
   //Employee wise chart for available leaves
   function available_leave_chart(dataSet) {
-    var myChart1 = document.getElementById("availableLeave");
+    var myChart1 = getCanvas("availableLeave");
+    if (!myChart1) {
+      return;
+    }
+    if (availableLeaveChart) {
+      availableLeaveChart.destroy();
+    }
     availableLeaveChart = new Chart(myChart1, {
       type: "pie",
       data: {
@@ -55,11 +91,17 @@ $(document).ready(function () {
     });
 
     window["availableLeaveChart"] = availableLeaveChart
-    ChartTheme.observe("availableLeaveChart")
+    observeChart("availableLeaveChart")
   }
 
   function department_leave_chart(dataSet) {
-    var myChart3 = document.getElementById("departmentLeave");
+    var myChart3 = getCanvas("departmentLeave");
+    if (!myChart3) {
+      return;
+    }
+    if (departmentLeaveChart) {
+      departmentLeaveChart.destroy();
+    }
     departmentLeaveChart = new Chart(myChart3, {
       type: "pie",
       data: {
@@ -73,11 +115,17 @@ $(document).ready(function () {
       },
     });
     window["departmentLeaveChart"] = departmentLeaveChart
-    ChartTheme.observe("departmentLeaveChart")
+    observeChart("departmentLeaveChart")
   }
 
   function leave_type_chart(dataSet) {
-    var myChart4 = document.getElementById("leaveType");
+    var myChart4 = getCanvas("leaveType");
+    if (!myChart4) {
+      return;
+    }
+    if (leaveTypeChart) {
+      leaveTypeChart.destroy();
+    }
     leaveTypeChart = new Chart(myChart4, {
       type: "doughnut",
       data: {
@@ -92,11 +140,17 @@ $(document).ready(function () {
     });
 
     window["leaveTypeChart"] = leaveTypeChart
-    ChartTheme.observe("leaveTypeChart")
+    observeChart("leaveTypeChart")
   }
 
   function leave_period_chart(dataSet) {
-    var myChart4 = document.getElementById("leavePeriod");
+    var myChart4 = getCanvas("leavePeriod");
+    if (!myChart4) {
+      return;
+    }
+    if (leavePeriodChart) {
+      leavePeriodChart.destroy();
+    }
     leavePeriodChart = new Chart(myChart4, {
       type: "line",
       data: {
@@ -136,15 +190,21 @@ $(document).ready(function () {
       },
     });
     window["leavePeriodChart"] = leavePeriodChart
-    ChartTheme.observe("leavePeriodChart")
+    observeChart("leavePeriodChart")
   }
 
   //Chart of leave request by employees
   function employee_leave_chart(dataSet) {
-    employeeLeaveChart.destroy();
+    if (employeeLeaveChart) {
+      employeeLeaveChart.destroy();
+    }
 
-    const { tickColor } = ChartTheme.getColors();
-    var myChart2 = document.getElementById("employeeLeave");
+    const tickColor = getTickColor();
+    var myChart2 = getCanvas("employeeLeave");
+    if (!myChart2) {
+      employeeLeaveChart = null;
+      return;
+    }
     employeeLeaveChart = new Chart(myChart2, {
       type: "bar",
       data: {
@@ -186,7 +246,7 @@ $(document).ready(function () {
       },
     });
     window["employeeLeaveChart"] = employeeLeaveChart
-    ChartTheme.observe("employeeLeaveChart")
+    observeChart("employeeLeaveChart")
   }
   $.ajax({
     type: "GET",

@@ -61,6 +61,10 @@ from horilla_views.templatetags.generic_template_filters import getattribute
 
 logger = logging.getLogger(__name__)
 
+_horilla_profile_view_classes = set()
+_registered_horilla_profile_tab_patterns = set()
+_horilla_profile_tab_urls_ready = False
+
 
 @method_decorator(hx_request_required, name="dispatch")
 class HorillaListView(ListView):
@@ -2369,19 +2373,6 @@ class HorillaProfileView(DetailView):
         self.ordered_ids_key = f"ordered_ids_{self.model.__name__.lower()}"
         # update_initial_cache(request, CACHE, HorillaProfileView)
 
-        from horilla.urls import path, urlpatterns
-
-        for tab in self.tabs:
-            if not tab.get("url"):
-                url = f"{self.url_prefix}-{tab['title']}"
-                urlpatterns.append(
-                    path(
-                        url + "/<int:pk>/",
-                        tab["view"],
-                    )
-                )
-                tab["url"] = "/" + url + "/{pk}/"
-
     @classmethod
     def add_tab(cls, tab: dict = None, index: int = None, tabs: list = None) -> None:
         """
@@ -2399,11 +2390,14 @@ class HorillaProfileView(DetailView):
         """
         if tabs:
             cls.tabs = cls.tabs + tabs
+            _horilla_profile_view_classes.add(cls)
         if tab:
             if index is None:
                 cls.tabs.append(tab)
+                _horilla_profile_view_classes.add(cls)
                 return
             cls.tabs.index(index, tab)
+            _horilla_profile_view_classes.add(cls)
 
     @classmethod
     def as_view(cls, **initkwargs):
@@ -2505,3 +2499,30 @@ class HorillaProfileView(DetailView):
         }
         CACHE.set(f"{self.request.session.session_key}search_in_instance_ids", cache)
         return context
+
+
+def ensure_horilla_profile_tab_urls_registered() -> None:
+    global _horilla_profile_tab_urls_ready
+    if _horilla_profile_tab_urls_ready:
+        return
+
+    from django.urls import path
+
+    import horilla.urls as horilla_urls
+
+    for cls in list(_horilla_profile_view_classes):
+        url_prefix = str(cls.__name__.lower())
+        for tab_item in getattr(cls, "tabs", []) or []:
+            url = tab_item.get("url")
+            if not url:
+                url = f"/{url_prefix}-{tab_item['title']}/{{pk}}/"
+                tab_item["url"] = url
+
+            pattern = url.strip("/").replace("{pk}", "<int:pk>/")
+            if pattern in _registered_horilla_profile_tab_patterns:
+                continue
+
+            horilla_urls.urlpatterns.append(path(pattern, tab_item["view"]))
+            _registered_horilla_profile_tab_patterns.add(pattern)
+
+    _horilla_profile_tab_urls_ready = True

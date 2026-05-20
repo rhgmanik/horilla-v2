@@ -128,6 +128,7 @@ APSCHEDULER_RUN_NOW_TIMEOUT = 25  # Seconds
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "horilla.horilla_middlewares.DynamicProfileTabUrlMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "corsheaders.middleware.CorsMiddleware",

@@ -55,6 +55,25 @@ class ThreadLocalMiddleware:
         return response
 
 
+class DynamicProfileTabUrlMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+        self._ready = False
+
+    def __call__(self, request):
+        if not self._ready:
+            try:
+                from horilla_views.generic.cbv.views import (
+                    ensure_horilla_profile_tab_urls_registered,
+                )
+
+                ensure_horilla_profile_tab_urls_registered()
+                self._ready = True
+            except Exception as e:
+                logger.warning(f"DynamicProfileTabUrlMiddleware failed: {e}")
+        return self.get_response(request)
+
+
 class MethodNotAllowedMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
