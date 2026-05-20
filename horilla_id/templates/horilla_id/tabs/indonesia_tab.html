@@ -6,7 +6,7 @@
     </span>
   </div>
   <div class="oh-card__body mt-4">
-    <form method="post" hx-post="." hx-target="#indonesiaTabCard" hx-swap="outerHTML">
+    <form method="post" action="{{ request.path }}" hx-post="{{ request.path }}" hx-target="#indonesiaTabCard" hx-swap="outerHTML">
       {% csrf_token %}
       <div class="row">
         <div class="col-12 col-sm-12 col-md-6 col-lg-6">
