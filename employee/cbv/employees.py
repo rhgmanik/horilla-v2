@@ -332,6 +332,25 @@ class EmployeesList(HorillaListView):
         (_("Date of Joining"), "employee_work_info__date_joining"),
     ]
 
+    def get_queryset(self, queryset=None, filtered=False, *args, **kwargs):
+        qs = super().get_queryset(queryset=queryset, filtered=filtered, *args, **kwargs)
+        qs = qs.select_related(
+            "employee_user_id",
+            "employee_work_info",
+            "employee_work_info__department_id",
+            "employee_work_info__job_position_id",
+            "employee_work_info__job_role_id",
+            "employee_work_info__reporting_manager_id",
+            "employee_work_info__shift_id",
+            "employee_work_info__work_type_id",
+            "employee_work_info__employee_type_id",
+            "employee_work_info__company_id",
+        ).prefetch_related(
+            "employee_work_info__tags",
+        )
+        self.queryset = qs
+        return qs
+
 
 def get_detailed_work_url(self):
     """
@@ -676,6 +695,25 @@ class EmployeeCard(HorillaCardView):
 
     model = Employee
     filter_class = EmployeeFilter
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        qs = qs.select_related(
+            "employee_user_id",
+            "employee_work_info",
+            "employee_work_info__department_id",
+            "employee_work_info__job_position_id",
+            "employee_work_info__job_role_id",
+            "employee_work_info__reporting_manager_id",
+            "employee_work_info__shift_id",
+            "employee_work_info__work_type_id",
+            "employee_work_info__employee_type_id",
+            "employee_work_info__company_id",
+        ).prefetch_related(
+            "employee_work_info__tags",
+        )
+        self.queryset = qs
+        return qs
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
