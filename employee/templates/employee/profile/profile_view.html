@@ -697,8 +697,11 @@ aria-hidden="true">
 		ensureProfileTabActive();
 	});
 
-	document.body.addEventListener("htmx:afterSwap", function () {
-		ensureProfileTabActive();
+	document.body.addEventListener("htmx:afterSwap", function (e) {
+		var target = e && e.detail && e.detail.target;
+		if (target && target.id === "view-container") {
+			ensureProfileTabActive();
+		}
 	});
 
 	toggleColumns("employee-tab", "fieldContainerTable");
