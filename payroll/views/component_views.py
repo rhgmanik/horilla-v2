@@ -226,6 +226,32 @@ def payroll_calculation(employee, start_date, end_date):
     for deduction in update_net_pay_deductions:
         net_pay_deduction_list.append(deduction)
     net_pay = net_pay - net_pay_deductions["net_deduction"]
+    filing = getattr(contract, "filing_status", None)
+    filing_code_raw = (
+        (getattr(filing, "filing_status", "") or "").strip().upper().replace(" ", "")
+    )
+    indonesia_ptkp_codes = {
+        "TK/0",
+        "TK/1",
+        "TK/2",
+        "TK/3",
+        "K/0",
+        "K/1",
+        "K/2",
+        "K/3",
+    }
+    if filing_code_raw in indonesia_ptkp_codes:
+        filing_code = filing_code_raw
+    elif filing_code_raw.startswith("TK") and len(filing_code_raw) == 3 and filing_code_raw[2] in "0123":
+        filing_code = f"TK/{filing_code_raw[2]}"
+    elif filing_code_raw.startswith("K") and len(filing_code_raw) == 2 and filing_code_raw[1] in "0123":
+        filing_code = f"K/{filing_code_raw[1]}"
+    else:
+        filing_code = filing_code_raw
+
+    is_indonesia_pph21 = bool(filing and getattr(filing, "use_py", False)) and (
+        filing_code in indonesia_ptkp_codes
+    )
     payslip_data = {
         "employee": employee,
         "contract_wage": contract_wage,
@@ -233,6 +259,7 @@ def payroll_calculation(employee, start_date, end_date):
         "gross_pay": gross_pay,
         "taxable_gross_pay": taxable_gross_pay["taxable_gross_pay"],
         "net_pay": net_pay,
+        "is_indonesia_pph21": is_indonesia_pph21,
         "allowances": allowances["allowances"],
         "paid_days": paid_days,
         "unpaid_days": unpaid_days,

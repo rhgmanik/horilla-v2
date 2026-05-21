@@ -504,6 +504,43 @@ def update_payslip_status(request, payslip_id):
     data = payslip.pay_head_data
     data["employee"] = payslip.employee_id
     data["payslip"] = payslip
+    if "is_indonesia_pph21" not in data:
+        contract = (
+            Contract.objects.filter(
+                employee_id=payslip.employee_id, contract_status="active"
+            )
+            .select_related("filing_status")
+            .first()
+        )
+        filing = getattr(contract, "filing_status", None)
+        filing_code_raw = (
+            (getattr(filing, "filing_status", "") or "")
+            .strip()
+            .upper()
+            .replace(" ", "")
+        )
+        indonesia_ptkp_codes = {
+            "TK/0",
+            "TK/1",
+            "TK/2",
+            "TK/3",
+            "K/0",
+            "K/1",
+            "K/2",
+            "K/3",
+        }
+        if filing_code_raw in indonesia_ptkp_codes:
+            filing_code = filing_code_raw
+        elif filing_code_raw.startswith("TK") and len(filing_code_raw) == 3 and filing_code_raw[2] in "0123":
+            filing_code = f"TK/{filing_code_raw[2]}"
+        elif filing_code_raw.startswith("K") and len(filing_code_raw) == 2 and filing_code_raw[1] in "0123":
+            filing_code = f"K/{filing_code_raw[1]}"
+        else:
+            filing_code = filing_code_raw
+
+        data["is_indonesia_pph21"] = bool(
+            filing and getattr(filing, "use_py", False)
+        ) and (filing_code in indonesia_ptkp_codes)
     data["json_data"] = data.copy()
     data["json_data"]["employee"] = payslip.employee_id.id
     data["json_data"]["payslip"] = payslip.id
@@ -637,6 +674,43 @@ def view_created_payslip(request, payslip_id, **kwargs):
         data = payslip.pay_head_data
         data["employee"] = payslip.employee_id
         data["payslip"] = payslip
+        if "is_indonesia_pph21" not in data:
+            contract = (
+                Contract.objects.filter(
+                    employee_id=payslip.employee_id, contract_status="active"
+                )
+                .select_related("filing_status")
+                .first()
+            )
+            filing = getattr(contract, "filing_status", None)
+            filing_code_raw = (
+                (getattr(filing, "filing_status", "") or "")
+                .strip()
+                .upper()
+                .replace(" ", "")
+            )
+            indonesia_ptkp_codes = {
+                "TK/0",
+                "TK/1",
+                "TK/2",
+                "TK/3",
+                "K/0",
+                "K/1",
+                "K/2",
+                "K/3",
+            }
+            if filing_code_raw in indonesia_ptkp_codes:
+                filing_code = filing_code_raw
+            elif filing_code_raw.startswith("TK") and len(filing_code_raw) == 3 and filing_code_raw[2] in "0123":
+                filing_code = f"TK/{filing_code_raw[2]}"
+            elif filing_code_raw.startswith("K") and len(filing_code_raw) == 2 and filing_code_raw[1] in "0123":
+                filing_code = f"K/{filing_code_raw[1]}"
+            else:
+                filing_code = filing_code_raw
+
+            data["is_indonesia_pph21"] = bool(
+                filing and getattr(filing, "use_py", False)
+            ) and (filing_code in indonesia_ptkp_codes)
         data["json_data"] = data.copy()
         data["json_data"]["employee"] = payslip.employee_id.id
         data["json_data"]["payslip"] = payslip.id

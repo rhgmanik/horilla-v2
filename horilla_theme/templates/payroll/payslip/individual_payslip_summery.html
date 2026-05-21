@@ -40,21 +40,23 @@
                 {{ basic_pay|floatformat:2|currency_symbol_position }}
             </p>
         </div>
-        <div class="grid sm:flex text-sm justify-between px-2">
-            <p class="text-sm flex items-center gap-3">
-                <span>{% trans "Taxable Gross Pay" %}</span>
-                <button>
-                    <img
-                        src="{% static 'horilla_theme/assets/img/icons/info.svg' %}"
-                        alt="{% trans 'Info' %}"
-                        title="{% trans 'Taxable amount' %}"
-                    />
-                </button>
-            </p>
-            <p class="font-semibold">
-                {{ taxable_gross_pay|floatformat:2|currency_symbol_position }}
-            </p>
-        </div>
+        {% if not is_indonesia_pph21 %}
+            <div class="grid sm:flex text-sm justify-between px-2">
+                <p class="text-sm flex items-center gap-3">
+                    <span>{% trans "Taxable Gross Pay" %}</span>
+                    <button>
+                        <img
+                            src="{% static 'horilla_theme/assets/img/icons/info.svg' %}"
+                            alt="{% trans 'Info' %}"
+                            title="{% trans 'Taxable amount' %}"
+                        />
+                    </button>
+                </p>
+                <p class="font-semibold">
+                    {{ taxable_gross_pay|floatformat:2|currency_symbol_position }}
+                </p>
+            </div>
+        {% endif %}
     </div>
     <div class="bg-[#0000000a] p-3 rounded-md">
         <div

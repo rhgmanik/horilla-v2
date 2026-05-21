@@ -60,15 +60,17 @@
                     </i>
                 </small>
             </span>
-            <span class="oh-payslip__netpay-title">
-                {% trans "Taxable Gross Pay" %}
-                <small style="margin-left:20px;font-weight:bold;">: {{taxable_gross_pay|floatformat:2|currency_symbol_position}}<br>
-                    <i style="font-style: italic; margin-left: 10px; font-weight: normal;">
-                        <ion-icon name="information-circle-outline" style="color:blue;"></ion-icon>
-                        {% trans "taxable amount" %}
-                    </i>
-                </small>
-            </span>
+            {% if not is_indonesia_pph21 %}
+                <span class="oh-payslip__netpay-title">
+                    {% trans "Taxable Gross Pay" %}
+                    <small style="margin-left:20px;font-weight:bold;">: {{taxable_gross_pay|floatformat:2|currency_symbol_position}}<br>
+                        <i style="font-style: italic; margin-left: 10px; font-weight: normal;">
+                            <ion-icon name="information-circle-outline" style="color:blue;"></ion-icon>
+                            {% trans "taxable amount" %}
+                        </i>
+                    </small>
+                </span>
+            {% endif %}
         </div>
     </div>
 </div>
