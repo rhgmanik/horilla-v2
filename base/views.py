@@ -1265,6 +1265,64 @@ def user_group_search(request):
 
 
 @login_required
+@require_http_methods(["POST", "DELETE"])
+@permission_required("auth.delete_group")
+def user_group_delete(request, obj_id):
+    instance = Group.objects.filter(id=obj_id).first()
+    deleted = False
+    message = _("Group not found")
+    message_type = "danger"
+    try:
+        if instance:
+            instance.delete()
+            deleted = True
+            message = _("The {} has been deleted successfully.").format(instance)
+            message_type = "success"
+    except ProtectedError as e:
+        model_verbose_names_set = set()
+        for obj in e.protected_objects:
+            model_verbose_names_set.add(_(obj._meta.verbose_name.capitalize()))
+        model_names_str = ", ".join(model_verbose_names_set)
+        message = _("This {} is already in use for {}.").format(instance, model_names_str)
+        message_type = "danger"
+    except Exception:
+        message = _("Something went wrong")
+        message_type = "danger"
+
+    if request.headers.get("HX-Request") == "true":
+        hx_target = request.META.get("HTTP_HX_TARGET") or ""
+
+        oob = format_html(
+            '<div id="messages" hx-swap-oob="innerHTML">'
+            '<div class="oh-alert oh-alert--animated oh-alert--{}">{}</div>'
+            "</div>",
+            message_type,
+            message,
+        )
+
+        if hx_target == "permissionContainer":
+            search = str(request.GET.get("search") or "")
+            groups = Group.objects.filter(name__icontains=search)
+            group_lines = render_to_string(
+                "base/auth/group_lines.html",
+                {"groups": paginator_qry(groups, request.GET.get("page")), "pd": request.GET.urlencode()},
+                request=request,
+            )
+            return HttpResponse(str(oob) + group_lines)
+
+        if deleted:
+            return HttpResponse(str(oob))
+
+        return HorillaRedirect(request)
+
+    if deleted:
+        messages.success(request, message)
+    else:
+        messages.error(request, message)
+    return redirect("user-group-view")
+
+
+@login_required
 @hx_request_required
 @permission_required("auth.add_group")
 def group_assign(request):

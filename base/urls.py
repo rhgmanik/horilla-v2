@@ -224,14 +224,8 @@ urlpatterns = [
     ),
     path(
         "user-group-delete/<int:obj_id>/",
-        views.object_delete,
+        views.user_group_delete,
         name="user-group-delete",
-        kwargs={
-            "model": Group,
-            "redirect_path": "/settings/user-group-view/",
-            "reload_view": "user-group-search",
-            "reload_target": "#permissionContainer",
-        },
     ),
     path(
         "group-permission-remove/<int:pid>/<int:gid>/",
