@@ -73,19 +73,24 @@ def delete_permission(function):
     from employee.models import EmployeeWorkInformation
 
     def _function(request, *args, **kwargs):
-        user = request.user
-        employee = user.employee_get
-        is_manager = EmployeeWorkInformation.objects.filter(
-            reporting_manager_id=employee
-        ).exists()
-        if (
-            request.user.has_perm(
-                kwargs["model"]._meta.app_label
-                + ".delete_"
-                + kwargs["model"]._meta.model_name
-            )
-            or is_manager
-        ):
+        permission = (
+            kwargs["model"]._meta.app_label
+            + ".delete_"
+            + kwargs["model"]._meta.model_name
+        )
+        if request.user.has_perm(permission):
+            return function(request, *args, **kwargs)
+
+        is_manager = False
+        try:
+            employee = request.user.employee_get
+            is_manager = EmployeeWorkInformation.objects.filter(
+                reporting_manager_id=employee
+            ).exists()
+        except Exception:
+            is_manager = False
+
+        if is_manager:
             return function(request, *args, **kwargs)
 
         return handle_no_permission(
