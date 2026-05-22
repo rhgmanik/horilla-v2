@@ -1574,7 +1574,7 @@ class WorkRecords(models.Model):
         ("HDP", _("Half Day Present")),
         ("ABS", _("Absent")),
         ("HD", _("Holiday/Company Leave")),
-        ("CONF", _("Conflict")),
+        ("CONF", _("Needs Validation")),
         ("DFT", _("Draft")),
     ]
 

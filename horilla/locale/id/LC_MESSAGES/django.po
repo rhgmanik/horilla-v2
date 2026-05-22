@@ -6007,6 +6007,9 @@ msgstr "Hari Libur/Cuti Perusahaan"
 msgid "Conflict"
 msgstr "Konflik"
 
+msgid "Needs Validation"
+msgstr "Perlu Validasi"
+
 #: attendance/models.py:951 base/methods.py:652
 #: employee/templates/payroll-tab.html:12
 #: employee/templates/tabs/payroll-tab.html:11 payroll/models/models.py:154
@@ -7592,7 +7595,7 @@ msgstr "Cuti"
 
 #: attendance/templates/attendance/work_record/work_record_list.html:83
 msgid "On leave, But attendance exist"
-msgstr "Sedang cuti, tapi ada data kehadiran"
+msgstr "Sedang cuti, namun ada absensi"
 
 #: attendance/templates/attendance/work_record/work_record_view copy.html:10
 msgid "record_type_name"

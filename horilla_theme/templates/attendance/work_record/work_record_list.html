@@ -14,8 +14,8 @@
 	<li>{% trans "Leave" %}</li>
 	<li>{% trans "Half Day Present" %}</li>
 	<li>{% trans "Absent" %}</li>
-	<li>{% trans "On Leave, But Attendance Exist" %}</li>
-	<li>{% trans "Conflict" %}</li>
+	<li>{% trans "On leave, But attendance exist" %}</li>
+	<li>{% trans "Needs Validation" %}</li>
 </ul>
 
 <div
@@ -59,20 +59,6 @@
                                 title="{{work_record.title_message}}"
                                 role="button"
                             {% endif %}
-                            {% if work_record %}
-                                onclick="
-                                    {% if work_record.work_record_type == 'ABS' %}
-                                        window.location.href = `{% url 'request-view' %}?employee_id={{work_record.employee_id.id}}&from_date={{work_record.date|date:'Y-m-d'}}&to_date={{work_record.date|date:'Y-m-d'}}`;
-                                    {% elif work_record.work_record_type != 'DFT' %}
-                                        {% if work_record.work_record_type == 'CONF' %}
-                                            localStorage.setItem('attendances-tab_activeIndex', '0');
-                                        {% else %}
-                                            localStorage.setItem('attendances-tab_activeIndex', '2');
-                                        {% endif %}
-                                        window.location.href = `{% url 'attendance-view' %}?employee_id={{work_record.employee_id.id}}&attendance_date={{work_record.date|date:'Y-m-d'}}`;
-                                    {% endif %}
-                                "
-                            {% endif %}
                         >
                             <span class="datebox
                                 {% if work_record %}
@@ -80,25 +66,45 @@
                                         conflict
                                     {% elif work_record.is_leave_record and work_record.work_record_type == 'FDP' %}
                                         leave-present
+                                    {% elif work_record.is_leave_record and work_record.work_record_type == 'ABS' %}
+                                        leave
                                     {% elif work_record.work_record_type == 'FDP' %}
                                         present
                                     {% elif work_record.work_record_type == 'HDP' %}
                                         half-day
                                     {% elif work_record.work_record_type == 'ABS' %}
-                                        leave
+                                        absent
                                     {% elif work_record.work_record_type == 'DFT' and work_record.shift_id and not work_record.date in leave_dates %}
                                         absent
                                     {% endif %}
                                 {% endif %}
                                 "
                             >
-                                {% if work_record.work_record_type == 'CONF' %} !
-                                {% elif work_record.work_record_type == 'FDP' %} P
-                                {% elif work_record.work_record_type == 'HDP' %} HP
-                                {% elif work_record.work_record_type == 'ABS' %} L
-                                {% elif work_record.work_record_type == 'DFT' and work_record.shift_id and not work_record.date in leave_dates %}
-                                    <span class="font-light" style="cursor: default">A</span>
-                                {% endif %}
+                                <a
+                                    class="text-decoration-none"
+                                    role="button"
+                                    {% if work_record %}
+                                        {% if work_record.is_leave_record and work_record.work_record_type == 'ABS' %}
+                                            href="{% url 'request-view' %}?employee_id={{work_record.employee_id.id}}&from_date={{work_record.date|date:'Y-m-d'}}&to_date={{work_record.date|date:'Y-m-d'}}"
+                                        {% elif work_record.work_record_type != 'DFT' %}
+                                            {% if work_record.work_record_type == 'CONF' %}
+                                                data-attendances-tab-index="0"
+                                            {% else %}
+                                                data-attendances-tab-index="2"
+                                            {% endif %}
+                                            href="{% url 'attendance-view' %}?employee_id={{work_record.employee_id.id}}&attendance_date={{work_record.date|date:'Y-m-d'}}"
+                                        {% endif %}
+                                    {% endif %}
+                                >
+                                    {% if work_record.work_record_type == 'CONF' %} !
+                                    {% elif work_record.work_record_type == 'FDP' %} P
+                                    {% elif work_record.work_record_type == 'HDP' %} HP
+                                    {% elif work_record.is_leave_record and work_record.work_record_type == 'ABS' %} L
+                                    {% elif work_record.work_record_type == 'ABS' %} A
+                                    {% elif work_record.work_record_type == 'DFT' and work_record.shift_id and not work_record.date in leave_dates %}
+                                        <span class="font-light" style="cursor: default">A</span>
+                                    {% endif %}
+                                </a>
                             </span>
                         </td>
                     {% endwith %}
@@ -147,13 +153,40 @@
     </div>
 {% endif %}
 
+<span
+    id="workRecordFilterState"
+    style="display:none"
+    data-has-start-date="{% if request.GET.start_date %}1{% else %}0{% endif %}"
+    data-has-end-date="{% if request.GET.end_date %}1{% else %}0{% endif %}"
+    data-has-month="{% if request.GET.month %}1{% else %}0{% endif %}"
+></span>
 <script>
     $(document).ready(function(){
-        {% if request.GET.start_date or request.GET.end_date %}
+        var stateEl = document.getElementById("workRecordFilterState");
+        if (!stateEl) {
+            return;
+        }
+
+        if (!window.__workRecordThemeTabHandlerAttached) {
+            window.__workRecordThemeTabHandlerAttached = true;
+            document.addEventListener("click", function (event) {
+                var link = event.target.closest("a[data-attendances-tab-index]");
+                if (!link) {
+                    return;
+                }
+                localStorage.setItem("attendances-tab_activeIndex", link.dataset.attendancesTabIndex);
+            });
+        }
+
+        var hasStartDate = stateEl.dataset.hasStartDate === "1";
+        var hasEndDate = stateEl.dataset.hasEndDate === "1";
+        var hasMonth = stateEl.dataset.hasMonth === "1";
+
+        if (hasStartDate || hasEndDate) {
             $("#monthYearField").val("");
-        {% elif request.GET.month %}
+        } else if (hasMonth) {
             $("#startDate").val("");
             $("#endDate").val("");
-        {% endif %}
+        }
     })
 </script>

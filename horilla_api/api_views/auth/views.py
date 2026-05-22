@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate
+from django.conf import settings
 from drf_yasg import openapi
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -111,6 +112,15 @@ class PasswordResetAPIView(APIView):
         )
 
     def post(self, request):
+        demo_group_name = getattr(settings, "HORILLA_DEMO_GROUP_NAME", "Demo")
+        try:
+            is_demo = request.user.groups.filter(name=demo_group_name).exists()
+        except Exception:
+            is_demo = False
+        if is_demo:
+            return Response(
+                {"error": "Password change is disabled for demo accounts."}, status=403
+            )
         serializer = PasswordResetSerializer(
             data=request.data, context={"request": request}
         )

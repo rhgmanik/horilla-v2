@@ -597,6 +597,10 @@ excel_columns = [
     ("employee_bank_details__country", _("Bank Country")),
     ("employee_bank_details__state", _("Bank State")),
     ("employee_bank_details__city", _("Bank City")),
+    ("indonesia_profile__npwp", _("NPWP")),
+    ("indonesia_profile__nik", _("NIK (KTP/Paspor)")),
+    ("indonesia_profile__bpjs_kesehatan", _("BPJS Kesehatan")),
+    ("indonesia_profile__bpjs_ketenagakerjaan", _("BPJS Ketenagakerjaan")),
 ]
 fields_to_remove = [
     "badge_id",

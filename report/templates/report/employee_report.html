@@ -132,11 +132,26 @@
                 <ion-icon name="download-outline" class="mr-1 md hydrated" role="img" aria-label="download"></ion-icon>
                 {% trans "Export Table" %}
             </button>
+            <button
+                class="oh-btn oh-btn--secondary ms-2"
+                style="margin-top: 10px;"
+                data-toggle="oh-modal-toggle"
+                data-target="#employeeExport"
+                hx-get="{% url 'work-info-export' %}"
+                hx-target="#employeeExportTarget"
+            >
+                <ion-icon name="download-outline" class="mr-1 md hydrated" role="img" aria-label="download"></ion-icon>
+                {% trans "Export Employees" %}
+            </button>
         </div>
     </div>
 
     <!-- Pivot Container -->
     <div id="pivot-container" class="mb-5" style="width: 100%; overflow-x: auto;"></div>
+</div>
+
+<div id="employeeExport" class="oh-modal" role="dialog" aria-labelledby="employeeExport" aria-hidden="true">
+    <div id="employeeExportTarget" class="oh-modal__dialog" style="max-width: 750px"></div>
 </div>
 
 

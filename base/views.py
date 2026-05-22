@@ -128,6 +128,16 @@ from base.methods import (
     paginator_qry,
     sortby,
 )
+
+
+def _is_demo_user(user):
+    if not user or getattr(user, "is_anonymous", True):
+        return False
+    demo_group_name = getattr(settings, "HORILLA_DEMO_GROUP_NAME", "Demo")
+    try:
+        return user.groups.filter(name=demo_group_name).exists()
+    except Exception:
+        return False
 from base.models import (
     WEEK_DAYS,
     WEEKS,
@@ -779,6 +789,9 @@ def change_password(request):
                       successfully, the page reloads with a success message.
     """
     user = request.user
+    if _is_demo_user(user):
+        messages.error(request, _("Password change is disabled for demo accounts."))
+        return HorillaRedirect(request)
     form = ChangePasswordForm(user=user)
     if request.method == "POST":
         form = ChangePasswordForm(user, request.POST)

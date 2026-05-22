@@ -5,6 +5,7 @@ from base.models import Company
 from employee.filters import EmployeeFilter
 from employee.models import Employee
 from horilla.decorators import login_required, permission_required
+from django.apps import apps
 
 
 @login_required
@@ -29,6 +30,7 @@ def employee_pivot(request):
     filtered_qs = EmployeeFilter(request.GET, queryset=qs)
     qs = filtered_qs.qs
 
+    include_indonesia = apps.is_installed("horilla_id")
     data = list(
         qs.values(
             "employee_first_name",
@@ -47,6 +49,24 @@ def employee_pivot(request):
             "employee_work_info__company_id__company",
             "employee_work_info__date_joining",
             "employee_work_info__experience",
+            "employee_bank_details__bank_name",
+            "employee_bank_details__branch",
+            "employee_bank_details__account_number",
+            "employee_bank_details__any_other_code1",
+            "employee_bank_details__any_other_code2",
+            "employee_bank_details__country",
+            "employee_bank_details__state",
+            "employee_bank_details__city",
+            *((
+                [
+                    "indonesia_profile__npwp",
+                    "indonesia_profile__nik",
+                    "indonesia_profile__bpjs_kesehatan",
+                    "indonesia_profile__bpjs_ketenagakerjaan",
+                ]
+                if include_indonesia
+                else []
+            )),
         )
     )
     choice_gender = {
@@ -104,6 +124,28 @@ def employee_pivot(request):
             ),
             "Experience": round(float(item["employee_work_info__experience"] or 0), 2),
             "Company": item["employee_work_info__company_id__company"],
+            "Bank Name": item["employee_bank_details__bank_name"] or "-",
+            "Bank Branch": item["employee_bank_details__branch"] or "-",
+            "Bank Account Number": item["employee_bank_details__account_number"] or "-",
+            "Bank Code #1": item["employee_bank_details__any_other_code1"] or "-",
+            "Bank Code #2": item["employee_bank_details__any_other_code2"] or "-",
+            "Bank Country": item["employee_bank_details__country"] or "-",
+            "Bank State": item["employee_bank_details__state"] or "-",
+            "Bank City": item["employee_bank_details__city"] or "-",
+            **(
+                {
+                    "NPWP": item.get("indonesia_profile__npwp") or "-",
+                    "NIK (KTP/Paspor)": item.get("indonesia_profile__nik") or "-",
+                    "BPJS Kesehatan": item.get("indonesia_profile__bpjs_kesehatan")
+                    or "-",
+                    "BPJS Ketenagakerjaan": item.get(
+                        "indonesia_profile__bpjs_ketenagakerjaan"
+                    )
+                    or "-",
+                }
+                if include_indonesia
+                else {}
+            ),
         }
         for item in data
     ]

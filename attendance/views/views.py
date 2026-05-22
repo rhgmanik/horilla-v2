@@ -112,7 +112,9 @@ from base.methods import (
 )
 from base.models import (
     AttendanceAllowedIP,
+    CompanyLeaves,
     EmployeeShiftSchedule,
+    Holidays,
     TrackLateComeEarlyOut,
     WorkType,
 )
@@ -2638,12 +2640,11 @@ def work_record_export(request):
     except ValueError:
         return HttpResponseBadRequest("Invalid month or year parameter.")
 
-    employees = EmployeeFilter(request.GET).qs
-    records = WorkRecords.objects.filter(date__month=month, date__year=year)
-    # all_date_objects = [date(year, month, day) for day in range(1, num_days + 1)]
+    employees = list(EmployeeFilter(request.GET).qs)
 
     start_date_str = request.GET.get("start_date")
     end_date_str = request.GET.get("end_date")
+    has_explicit_range = bool(start_date_str or end_date_str)
 
     # Initialize as None
     start_date = None
@@ -2663,17 +2664,23 @@ def work_record_export(request):
         except ValueError:
             end_date = None
 
-    # Default end_date to today if missing or invalid
-    if not end_date:
-        end_date = date.today()
+    if not has_explicit_range:
+        start_date = date(year=year, month=month, day=1)
+        end_day = calendar.monthrange(year, month)[1]
+        end_date = date(year=year, month=month, day=end_day)
+    else:
+        if not end_date:
+            reference_date = start_date or date(year=year, month=month, day=1)
+            end_day = calendar.monthrange(reference_date.year, reference_date.month)[1]
+            end_date = date(
+                year=reference_date.year, month=reference_date.month, day=end_day
+            )
 
-    # Default start_date to first day of end_date's month if missing or invalid
-    if not start_date:
-        start_date = date(year=end_date.year, month=end_date.month, day=1)
+        if not start_date:
+            start_date = date(year=end_date.year, month=end_date.month, day=1)
 
     # Ensure start_date is not after end_date
     if start_date > end_date:
-        # Optional: raise error or swap, depending on your use case
         start_date = date(year=end_date.year, month=end_date.month, day=1)
 
     # Generate list of dates between start_date and end_date (inclusive)
@@ -2682,30 +2689,131 @@ def work_record_export(request):
     while current_date <= end_date:
         all_date_objects.append(current_date)
         current_date += timedelta(days=1)
-    leave_dates = set(monthly_leave_days(month, year))
 
-    record_lookup = defaultdict(lambda: "ABS")
-    for record in records:
-        if record.date <= date.today():
-            record_key = (record.employee_id, record.date)
-            record_lookup[record_key] = record.work_record_type
+    company_leave_dates = set()
+    holiday_dates = set()
+    cursor = date(year=start_date.year, month=start_date.month, day=1)
+    end_cursor = date(year=end_date.year, month=end_date.month, day=1)
 
-    date_format = request.user.employee_get.get_date_format()
-    format_string = settings.HORILLA_DATE_FORMATS.get(date_format)
-    formatted_dates = [day.strftime(format_string) for day in all_date_objects]
+    def company_leave_days(month, year):
+        dates = []
+        company_leaves = CompanyLeaves.objects.all()
+        for company_leave in company_leaves:
+            based_on_week = company_leave.based_on_week
+            based_on_week_day = company_leave.based_on_week_day
+            if based_on_week is not None:
+                calendar.setfirstweekday(6)
+                month_calendar = calendar.monthcalendar(year, month)
+                try:
+                    weeks = month_calendar[int(based_on_week)]
+                except Exception:
+                    continue
+                weekdays_in_weeks = [day for day in weeks if day != 0]
+                for day in weekdays_in_weeks:
+                    date_name = datetime.strptime(
+                        f"{year}-{month:02}-{day:02}", "%Y-%m-%d"
+                    ).date()
+                    try:
+                        weekday_match = date_name.weekday() == int(based_on_week_day)
+                    except Exception:
+                        weekday_match = False
+                    if weekday_match and date_name not in dates:
+                        dates.append(date_name)
+            else:
+                calendar.setfirstweekday(0)
+                month_calendar = calendar.monthcalendar(year, month)
+                try:
+                    week_day_index = int(based_on_week_day)
+                except Exception:
+                    continue
+                for week in month_calendar:
+                    if week[week_day_index] != 0:
+                        date_name = datetime.strptime(
+                            f"{year}-{month:02}-{week[week_day_index]:02}",
+                            "%Y-%m-%d",
+                        ).date()
+                        if date_name not in dates:
+                            dates.append(date_name)
+        return dates
+
+    while cursor <= end_cursor:
+        holiday_dates.update(
+            Holidays.objects.filter(
+                start_date__month=cursor.month, start_date__year=cursor.year
+            ).values_list("start_date", flat=True)
+        )
+        company_leave_dates.update(company_leave_days(cursor.month, cursor.year))
+        if cursor.month == 12:
+            cursor = date(year=cursor.year + 1, month=1, day=1)
+        else:
+            cursor = date(year=cursor.year, month=cursor.month + 1, day=1)
+
+    leave_dates = holiday_dates.union(company_leave_dates)
+
+    present_text = str(_("Present"))
+    half_day_present_text = str(_("Half Day Present"))
+    leave_text = str(_("Leave"))
+    absent_text = str(_("Absent"))
+    leave_attendance_text = str(_("On leave, But attendance exist"))
+    needs_validation_text = str(_("Needs Validation"))
+
+    records = (
+        WorkRecords.objects.filter(
+            employee_id__in=employees,
+            date__range=(start_date, end_date),
+            date__lte=date.today(),
+        )
+        .values("employee_id", "date", "work_record_type", "is_leave_record", "shift_id")
+        .iterator()
+    )
+    record_lookup = {(r["employee_id"], r["date"]): r for r in records}
+
+    date_keys = [day.isoformat() for day in all_date_objects]
+    header_day_labels = [str(day.day) for day in all_date_objects]
+
     data_rows = []
+    format_rows = []
 
     for employee in employees:
         row_data = {"Employee": employee}
-        for day, formatted_day in zip(all_date_objects, formatted_dates):
-            if not day in leave_dates and day < date.today():
-                row_data[formatted_day] = record_lookup.get((employee, day), "DFT")
-            else:
-                data = record_lookup.get((employee, day), "")
-                row_data[formatted_day] = data if data != "DFT" else ""
-        data_rows.append(row_data)
+        row_formats = {}
+        for day, key in zip(all_date_objects, date_keys):
+            record = record_lookup.get((employee.id, day))
+            if not record:
+                row_data[key] = ""
+                continue
 
-    columns = ["Employee"] + formatted_dates
+            work_record_type = record.get("work_record_type")
+            is_leave_record = record.get("is_leave_record")
+            shift_id = record.get("shift_id")
+
+            if work_record_type == "CONF":
+                row_data[key] = "!"
+                row_formats[key] = "CONF"
+            elif is_leave_record and work_record_type == "FDP":
+                row_data[key] = "P"
+                row_formats[key] = "LEAVE_PRESENT"
+            elif is_leave_record and work_record_type == "ABS":
+                row_data[key] = "L"
+                row_formats[key] = "LEAVE"
+            elif work_record_type == "FDP":
+                row_data[key] = "P"
+                row_formats[key] = "PRESENT"
+            elif work_record_type == "HDP":
+                row_data[key] = "HP"
+                row_formats[key] = "HALF_DAY"
+            elif work_record_type == "ABS":
+                row_data[key] = "A"
+                row_formats[key] = "ABSENT"
+            elif work_record_type == "DFT" and shift_id and day not in leave_dates:
+                row_data[key] = "A"
+                row_formats[key] = "ABSENT"
+            else:
+                row_data[key] = ""
+        data_rows.append(row_data)
+        format_rows.append(row_formats)
+
+    columns = ["Employee"] + date_keys
     df = pd.DataFrame(data_rows, columns=columns)
 
     company = getattr(request, "selected_company_instance", None)
@@ -2767,37 +2875,166 @@ def work_record_export(request):
             except Exception as e:
                 print(f"Logo insert failed: {e}")
 
-        # --- Cell formats for codes ---
+        table_header_format = workbook.add_format(
+            {
+                "bold": True,
+                "align": "center",
+                "valign": "vcenter",
+                "bg_color": "#F4F4F4",
+                "border": 1,
+            }
+        )
+        holiday_header_format = workbook.add_format(
+            {
+                "bold": True,
+                "align": "center",
+                "valign": "vcenter",
+                "bg_color": "#e3e3e8",
+                "border": 1,
+            }
+        )
+        company_leave_header_format = workbook.add_format(
+            {
+                "bold": True,
+                "align": "center",
+                "valign": "vcenter",
+                "bg_color": "#ff6b6b",
+                "font_color": "#ffffff",
+                "border": 1,
+            }
+        )
+        holiday_cell_format = workbook.add_format(
+            {
+                "bg_color": "#e3e3e8",
+                "align": "center",
+                "valign": "vcenter",
+                "border": 1,
+            }
+        )
+        company_leave_cell_format = workbook.add_format(
+            {
+                "bg_color": "#ff6b6b",
+                "font_color": "#ffffff",
+                "align": "center",
+                "valign": "vcenter",
+                "border": 1,
+            }
+        )
+        cell_format_present = workbook.add_format(
+            {
+                "bg_color": "#38c338",
+                "font_color": "#ffffff",
+                "align": "center",
+                "valign": "vcenter",
+                "border": 1,
+            }
+        )
+        cell_format_half_day = workbook.add_format(
+            {
+                "bg_color": "#dfdf52",
+                "font_color": "#000000",
+                "align": "center",
+                "valign": "vcenter",
+                "border": 1,
+            }
+        )
+        cell_format_leave = workbook.add_format(
+            {
+                "bg_color": "#808080",
+                "font_color": "#ffffff",
+                "align": "center",
+                "valign": "vcenter",
+                "border": 1,
+            }
+        )
+        cell_format_absent = workbook.add_format(
+            {
+                "bg_color": "#a8b1ff",
+                "font_color": "#ffffff",
+                "align": "center",
+                "valign": "vcenter",
+                "border": 1,
+            }
+        )
+        cell_format_conflict = workbook.add_format(
+            {
+                "bg_color": "#ed4c4c",
+                "font_color": "#ffffff",
+                "align": "center",
+                "valign": "vcenter",
+                "border": 1,
+            }
+        )
+        cell_format_leave_present = workbook.add_format(
+            {
+                "bg_color": "#c65d0f",
+                "font_color": "#ffffff",
+                "align": "center",
+                "valign": "vcenter",
+                "border": 1,
+            }
+        )
         formats = {
-            "ABS": workbook.add_format(
-                {"bg_color": "#808080", "font_color": "#ffffff"}
-            ),
-            "FDP": workbook.add_format(
-                {"bg_color": "#38c338", "font_color": "#ffffff"}
-            ),
-            "HDP": workbook.add_format(
-                {"bg_color": "#dfdf52", "font_color": "#000000"}
-            ),
-            "CONF": workbook.add_format(
-                {"bg_color": "#ed4c4c", "font_color": "#ffffff"}
-            ),
-            "DFT": workbook.add_format(
-                {"bg_color": "#a8b1ff", "font_color": "#ffffff"}
-            ),
+            "PRESENT": cell_format_present,
+            "HALF_DAY": cell_format_half_day,
+            "ABSENT": cell_format_absent,
+            "LEAVE": cell_format_leave,
+            "LEAVE_PRESENT": cell_format_leave_present,
+            "CONF": cell_format_conflict,
         }
 
-        # --- Apply cell formats ---
-        for row_idx, row in enumerate(
-            df.itertuples(index=False), start=7
-        ):  # data starts from row 7
-            for col_idx, cell_value in enumerate(row):
-                if cell_value in formats:
-                    worksheet.write(row_idx, col_idx, cell_value, formats[cell_value])
+        worksheet.write(6, 0, str(_("Employee")), table_header_format)
+        for col_idx, (day, label) in enumerate(
+            zip(all_date_objects, header_day_labels), start=1
+        ):
+            if day in company_leave_dates:
+                worksheet.write(6, col_idx, label, company_leave_header_format)
+            elif day in holiday_dates:
+                worksheet.write(6, col_idx, label, holiday_header_format)
+            else:
+                worksheet.write(6, col_idx, label, table_header_format)
 
-        # --- Auto column width ---
-        for col_idx, col in enumerate(df.columns):
-            max_len = max(df[col].astype(str).map(len).max(), len(col))
-            worksheet.set_column(col_idx, col_idx, min(max_len + 2, 50))
+        data_start_row = 7
+        for row_offset, employee in enumerate(employees):
+            row_idx = data_start_row + row_offset
+            for col_offset, (key, day) in enumerate(zip(date_keys, all_date_objects), start=1):
+                value = data_rows[row_offset].get(key, "")
+                fmt_key = format_rows[row_offset].get(key)
+                cell_format = formats.get(fmt_key)
+                if cell_format:
+                    worksheet.write(row_idx, col_offset, value, cell_format)
+                elif day in company_leave_dates:
+                    worksheet.write_blank(row_idx, col_offset, None, company_leave_cell_format)
+                elif day in holiday_dates:
+                    worksheet.write_blank(row_idx, col_offset, None, holiday_cell_format)
+                else:
+                    worksheet.write(row_idx, col_offset, value)
+
+        legend_start_row = data_start_row + len(employees) + 2
+        worksheet.write(legend_start_row, 0, f"{present_text} : P", cell_format_present)
+        worksheet.write(
+            legend_start_row + 1, 0, f"{half_day_present_text} : HP", cell_format_half_day
+        )
+        worksheet.write(legend_start_row + 2, 0, f"{absent_text} : A", cell_format_absent)
+        worksheet.write(legend_start_row + 3, 0, f"{leave_text} : L", cell_format_leave)
+        worksheet.write(
+            legend_start_row + 4,
+            0,
+            f"{leave_attendance_text} : P",
+            cell_format_leave_present,
+        )
+        worksheet.write(
+            legend_start_row + 5, 0, f"{needs_validation_text} : !", cell_format_conflict
+        )
+        worksheet.write(
+            legend_start_row + 6,
+            0,
+            f"{str(_('Holiday/Company Leave'))} : ",
+            company_leave_cell_format,
+        )
+
+        worksheet.set_column(0, 0, 28)
+        worksheet.set_column(1, len(date_keys), 4)
 
     output.seek(0)
 
