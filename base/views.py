@@ -1445,6 +1445,21 @@ def object_delete(request, obj_id, **kwargs):
             )
             return HttpResponse(str(inner) + script)
 
+    reload_view = kwargs.get("reload_view")
+    reload_target = kwargs.get("reload_target")
+    if request.headers.get("HX-Request") == "true" and reload_view and reload_target:
+        qs = request.GET.urlencode()
+        reload_url = reverse(reload_view)
+        if qs:
+            reload_url = f"{reload_url}?{qs}"
+        return HttpResponse(
+            format_html(
+                '<span hx-get="{}" hx-target="{}" hx-swap="innerHTML" hx-trigger="load"></span>',
+                reload_url,
+                reload_target,
+            )
+        )
+
     if redirect_path:
         previous_data = request.GET.urlencode()
         redirect_path = redirect_path + "?" + previous_data
