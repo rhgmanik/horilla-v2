@@ -826,6 +826,9 @@ def change_username(request):
                       successfully, the page reloads with a success message.
     """
     user = request.user
+    if _is_demo_user(user):
+        messages.error(request, _("Username change is disabled for demo accounts."))
+        return HorillaRedirect(request)
     form = ChangeUsernameForm(user=user, initial={"old_username": user.username})
     if request.method == "POST":
         form = ChangeUsernameForm(user, request.POST)
