@@ -695,13 +695,18 @@ function handleHtmxTarget(elm, path, verb) {
 var originalConfirm = window.confirm;
 // Override the default confirm function with SweetAlert
 window.confirm = function (message) {
-    var event = window.event || {};
+    var event = window.event;
+    if (!event) {
+        return originalConfirm(message);
+    }
     event.preventDefault();
 
-    const triggerEl = event.target.closest(
+    const triggerEl = event.target?.closest(
         "form, a, [hx-post], [hx-get], [hx-delete], [hx-put]"
     );
-    if (!triggerEl) return;
+    if (!triggerEl) {
+        return false;
+    }
 
     Swal.fire({
         text: message,
@@ -821,6 +826,7 @@ window.confirm = function (message) {
             }
         }
     });
+    return false;
 };
 
 var excludeIds = "#employeeSearch";
