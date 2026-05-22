@@ -29,6 +29,7 @@ from django.core.mail import EmailMessage, EmailMultiAlternatives
 from django.core.management import call_command
 from django.core.validators import validate_ipv46_address
 from django.db.models import ProtectedError, Q
+from django.db.utils import OperationalError
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -1274,10 +1275,34 @@ def user_group_delete(request, obj_id):
     message_type = "danger"
     try:
         if instance:
-            instance.delete()
-            deleted = True
-            message = _("The {} has been deleted successfully.").format(instance)
-            message_type = "success"
+            try:
+                instance.delete()
+                deleted = True
+                message = _("The {} has been deleted successfully.").format(instance)
+                message_type = "success"
+            except OperationalError:
+                group_name = str(instance)
+                from horilla_auth.models import HorillaUser
+
+                using = Group.objects.db
+                HorillaUser.groups.through.objects.using(using).filter(
+                    group_id=obj_id
+                ).delete()
+                Group.permissions.through.objects.using(using).filter(
+                    group_id=obj_id
+                ).delete()
+                deleted_count = (
+                    Group._base_manager.using(using)
+                    .filter(id=obj_id)
+                    ._raw_delete(using)
+                )
+                deleted = deleted_count > 0
+                if deleted:
+                    message = _("The {} has been deleted successfully.").format(group_name)
+                    message_type = "success"
+                else:
+                    message = _("Group not found")
+                    message_type = "danger"
     except ProtectedError as e:
         model_verbose_names_set = set()
         for obj in e.protected_objects:
