@@ -1473,7 +1473,23 @@ def object_delete(request, obj_id, **kwargs):
     delete_error = False
     try:
         instance = model.objects.get(id=obj_id)
-        instance.delete()
+        try:
+            instance.delete()
+        except OperationalError:
+            if model is not Group:
+                raise
+            group_name = str(instance)
+            from horilla_auth.models import HorillaUser
+
+            using = Group.objects.db
+            HorillaUser.groups.through.objects.using(using).filter(
+                group_id=obj_id
+            ).delete()
+            Group.permissions.through.objects.using(using).filter(
+                group_id=obj_id
+            ).delete()
+            Group._base_manager.using(using).filter(id=obj_id)._raw_delete(using)
+            instance = group_name
         messages.success(
             request, _("The {} has been deleted successfully.").format(instance)
         )

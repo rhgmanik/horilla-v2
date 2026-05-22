@@ -26,11 +26,10 @@
           </button>
         {% endif %}
         {% if perms.auth.delete_group %}
+        {% trans "Are you sure you want to delete this group?" as confirm_delete_group %}
         <form
-          hx-post="{% url 'user-group-delete' group.id %}"
-          hx-confirm="{% trans 'Are you sure you want to delete this group?' %}"
-          hx-target="#permissionContainer"
-          hx-swap="innerHTML"
+          action="{% url 'user-group-delete' group.id %}"
+          onsubmit="return confirm('{{ confirm_delete_group|escapejs }}');"
           method="post"
           style="display: inline;"
         >
