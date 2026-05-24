@@ -29,7 +29,6 @@ from django.core.mail import EmailMessage, EmailMultiAlternatives
 from django.core.management import call_command
 from django.core.validators import validate_ipv46_address
 from django.db.models import ProtectedError, Q
-from django.db.utils import OperationalError
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -901,8 +900,15 @@ def send_otp(request):
         from_email=display_email_name,
         to=[email],
     )
-    thread = threading.Thread(target=email.send)
-    thread.start()
+    try:
+        email.send(fail_silently=False)
+        messages.success(request, _("OTP sent successfully."))
+    except Exception:
+        request.session["otp_code"] = None
+        request.session["otp_code_timestamp"] = None
+        request.session["otp_code_verified"] = False
+        request.session.save()
+        messages.error(request, _("Failed to send OTP. Please check email settings."))
 
     return redirect("two-factor")
 
@@ -1266,88 +1272,6 @@ def user_group_search(request):
 
 
 @login_required
-@require_http_methods(["POST", "DELETE"])
-@permission_required("auth.delete_group")
-def user_group_delete(request, obj_id):
-    instance = Group.objects.filter(id=obj_id).first()
-    deleted = False
-    message = _("Group not found")
-    message_type = "danger"
-    try:
-        if instance:
-            try:
-                instance.delete()
-                deleted = True
-                message = _("The {} has been deleted successfully.").format(instance)
-                message_type = "success"
-            except OperationalError:
-                group_name = str(instance)
-                from horilla_auth.models import HorillaUser
-
-                using = Group.objects.db
-                HorillaUser.groups.through.objects.using(using).filter(
-                    group_id=obj_id
-                ).delete()
-                Group.permissions.through.objects.using(using).filter(
-                    group_id=obj_id
-                ).delete()
-                deleted_count = (
-                    Group._base_manager.using(using)
-                    .filter(id=obj_id)
-                    ._raw_delete(using)
-                )
-                deleted = deleted_count > 0
-                if deleted:
-                    message = _("The {} has been deleted successfully.").format(group_name)
-                    message_type = "success"
-                else:
-                    message = _("Group not found")
-                    message_type = "danger"
-    except ProtectedError as e:
-        model_verbose_names_set = set()
-        for obj in e.protected_objects:
-            model_verbose_names_set.add(_(obj._meta.verbose_name.capitalize()))
-        model_names_str = ", ".join(model_verbose_names_set)
-        message = _("This {} is already in use for {}.").format(instance, model_names_str)
-        message_type = "danger"
-    except Exception:
-        message = _("Something went wrong")
-        message_type = "danger"
-
-    if request.headers.get("HX-Request") == "true":
-        hx_target = request.META.get("HTTP_HX_TARGET") or ""
-
-        oob = format_html(
-            '<div id="messages" hx-swap-oob="innerHTML">'
-            '<div class="oh-alert oh-alert--animated oh-alert--{}">{}</div>'
-            "</div>",
-            message_type,
-            message,
-        )
-
-        if hx_target == "permissionContainer":
-            search = str(request.GET.get("search") or "")
-            groups = Group.objects.filter(name__icontains=search)
-            group_lines = render_to_string(
-                "base/auth/group_lines.html",
-                {"groups": paginator_qry(groups, request.GET.get("page")), "pd": request.GET.urlencode()},
-                request=request,
-            )
-            return HttpResponse(str(oob) + group_lines)
-
-        if deleted:
-            return HttpResponse(str(oob))
-
-        return HorillaRedirect(request)
-
-    if deleted:
-        messages.success(request, message)
-    else:
-        messages.error(request, message)
-    return redirect("user-group-view")
-
-
-@login_required
 @hx_request_required
 @permission_required("auth.add_group")
 def group_assign(request):
@@ -1473,23 +1397,7 @@ def object_delete(request, obj_id, **kwargs):
     delete_error = False
     try:
         instance = model.objects.get(id=obj_id)
-        try:
-            instance.delete()
-        except OperationalError:
-            if model is not Group:
-                raise
-            group_name = str(instance)
-            from horilla_auth.models import HorillaUser
-
-            using = Group.objects.db
-            HorillaUser.groups.through.objects.using(using).filter(
-                group_id=obj_id
-            ).delete()
-            Group.permissions.through.objects.using(using).filter(
-                group_id=obj_id
-            ).delete()
-            Group._base_manager.using(using).filter(id=obj_id)._raw_delete(using)
-            instance = group_name
+        instance.delete()
         messages.success(
             request, _("The {} has been deleted successfully.").format(instance)
         )
@@ -1543,21 +1451,6 @@ def object_delete(request, obj_id, **kwargs):
                 "</script>"
             )
             return HttpResponse(str(inner) + script)
-
-    reload_view = kwargs.get("reload_view")
-    reload_target = kwargs.get("reload_target")
-    if request.headers.get("HX-Request") == "true" and reload_view and reload_target:
-        qs = request.GET.urlencode()
-        reload_url = reverse(reload_view)
-        if qs:
-            reload_url = f"{reload_url}?{qs}"
-        return HttpResponse(
-            format_html(
-                '<span hx-get="{}" hx-target="{}" hx-swap="innerHTML" hx-trigger="load"></span>',
-                reload_url,
-                reload_target,
-            )
-        )
 
     if redirect_path:
         previous_data = request.GET.urlencode()
