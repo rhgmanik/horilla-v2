@@ -1,6 +1,247 @@
 {% load static horillafilters attendancefilters i18n %}
 
 {% if request.user.employee_get %}
+    <style>
+        @media (max-width: 991px) {
+            .check {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 44px;
+                min-width: 44px;
+                height: 44px;
+                padding: 0;
+                border-radius: 9999px;
+            }
+
+            .check .con,
+            .check .date div,
+            .check .time-runner,
+            .check .at-work-seconds,
+            .at_work_seconds {
+                display: none !important;
+            }
+        }
+    </style>
+    <script>
+        function horillaGetCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function horillaGetCoords() {
+            return new Promise(function (resolve) {
+                if (!navigator.geolocation) {
+                    resolve(null);
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    function (pos) {
+                        resolve(pos.coords);
+                    },
+                    function () {
+                        resolve(null);
+                    },
+                    { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+                );
+            });
+        }
+
+        function horillaPickSelfieFile() {
+            return new Promise(function (resolve, reject) {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = "image/*";
+                input.capture = "user";
+                input.onchange = function () {
+                    const file = input.files && input.files[0] ? input.files[0] : null;
+                    if (!file) {
+                        const err = new Error("Canceled");
+                        err.horillaCanceled = true;
+                        reject(err);
+                        return;
+                    }
+                    resolve(file);
+                };
+                input.click();
+            });
+        }
+
+        function horillaCaptureSelfie() {
+            return new Promise(function (resolve, reject) {
+                const modal = document.getElementById("horilla-selfie-modal");
+                const video = document.getElementById("horilla-selfie-video");
+                const canvas = document.getElementById("horilla-selfie-canvas");
+                const captureBtn = document.getElementById("horilla-selfie-capture");
+                const cancelBtn = document.getElementById("horilla-selfie-cancel");
+
+                if (!modal || !video || !canvas || !captureBtn || !cancelBtn) {
+                    reject(new Error("Selfie capture UI is not ready."));
+                    return;
+                }
+
+                let stream = null;
+                let closed = false;
+
+                function closeModal() {
+                    if (closed) return;
+                    closed = true;
+                    modal.style.display = "none";
+                    try {
+                        if (stream) {
+                            stream.getTracks().forEach(function (t) { t.stop(); });
+                        }
+                    } catch (e) {}
+                    try { video.srcObject = null; } catch (e) {}
+                    captureBtn.onclick = null;
+                    cancelBtn.onclick = null;
+                }
+
+                cancelBtn.onclick = function () {
+                    closeModal();
+                    const err = new Error("Canceled");
+                    err.horillaCanceled = true;
+                    reject(err);
+                };
+
+                captureBtn.onclick = function () {
+                    try {
+                        const width = video.videoWidth || 640;
+                        const height = video.videoHeight || 480;
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext("2d");
+                        ctx.drawImage(video, 0, 0, width, height);
+                        canvas.toBlob(function (blob) {
+                            if (!blob) {
+                                closeModal();
+                                reject(new Error("Failed to capture selfie."));
+                                return;
+                            }
+                            closeModal();
+                            resolve(blob);
+                        }, "image/jpeg", 0.9);
+                    } catch (e) {
+                        closeModal();
+                        reject(e);
+                    }
+                };
+
+                modal.style.display = "flex";
+
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    closeModal();
+                    horillaPickSelfieFile().then(resolve).catch(reject);
+                    return;
+                }
+
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
+                    .then(function (s) {
+                        stream = s;
+                        video.srcObject = stream;
+                        return video.play();
+                    })
+                    .catch(function (e) {
+                        closeModal();
+                        horillaPickSelfieFile().then(resolve).catch(function () {
+                            reject(e);
+                        });
+                    });
+            });
+        }
+
+        function horillaClockInOut(url, requireSelfie) {
+            const target = "#attendance-activity-container";
+
+            const getSelfie = requireSelfie
+                ? horillaCaptureSelfie().then(function (fileOrBlob) {
+                    return fileOrBlob;
+                })
+                : Promise.resolve(null);
+
+            getSelfie
+                .then(function (fileOrBlob) {
+                    return horillaGetCoords().then(function (coords) {
+                        return { coords: coords, fileOrBlob: fileOrBlob };
+                    });
+                })
+                .then(function (payload) {
+                    const values = new FormData();
+                    const csrf = horillaGetCookie("csrftoken");
+                    if (csrf) {
+                        values.append("csrfmiddlewaretoken", csrf);
+                    }
+                    if (payload.coords) {
+                        values.append("latitude", payload.coords.latitude);
+                        values.append("longitude", payload.coords.longitude);
+                    }
+                    if (payload.fileOrBlob) {
+                        values.append("selfie", payload.fileOrBlob, "selfie.jpg");
+                    }
+                    const headers = { "HX-Request": "true" };
+                    if (csrf) {
+                        headers["X-CSRFToken"] = csrf;
+                    }
+                    fetch(url, {
+                        method: "POST",
+                        body: values,
+                        headers: headers,
+                        credentials: "same-origin",
+                    })
+                        .then(function (resp) {
+                            const redirectTo = resp.headers.get("HX-Redirect");
+                            if (redirectTo) {
+                                window.location.href = redirectTo;
+                                return null;
+                            }
+                            return resp.text().then(function (html) {
+                                if (!resp.ok) {
+                                    throw new Error("Failed to mark attendance.");
+                                }
+                                const el = document.querySelector(target);
+                                if (el) {
+                                    el.innerHTML = html;
+                                    if (window.htmx && htmx.process) {
+                                        htmx.process(el);
+                                    }
+                                }
+                                return null;
+                            });
+                        })
+                        .catch(function (e) {
+                            alert(e && e.message ? e.message : "Failed to mark attendance.");
+                        });
+                })
+                .catch(function (e) {
+                    if (e && e.horillaCanceled) return;
+                    alert(e && e.message ? e.message : "Failed to mark attendance.");
+                });
+        }
+    </script>
+    <div id="horilla-selfie-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:#fff; width:min(420px, 92vw); padding:16px; border-radius:10px;">
+            <div style="font-weight:600; margin-bottom:10px;">{% trans "Take a Selfie" %}</div>
+            <video id="horilla-selfie-video" autoplay playsinline style="width:100%; border-radius:8px; background:#000;"></video>
+            <canvas id="horilla-selfie-canvas" style="display:none;"></canvas>
+            <div style="display:flex; gap:10px; margin-top:12px;">
+                <button type="button" class="oh-btn oh-btn--success" id="horilla-selfie-capture" style="flex:1;">{% trans "Capture" %}</button>
+                <button type="button" class="oh-btn oh-btn--danger-outline" id="horilla-selfie-cancel" style="flex:1;">{% trans "Cancel" %}</button>
+            </div>
+        </div>
+    </div>
+    {% url 'clock-in' as clock_in_url %}
+    {% url 'clock-out' as clock_out_url %}
+    {% with company=request.user.employee_get.get_company %}
     {% with get_forecasted_at_work=request.user.employee_get.get_forecasted_at_work %}
         {% if request.session.selected_company == "all" or request.user.employee_get.employee_work_info.company_id.id == request.session.selected_company|default:"-1"|add:"0" %}
             <!-- "CHEKING WETHER Check in/check out enabled" -->
@@ -15,9 +256,8 @@
                     <span class="at_work_seconds" data-at-work-seconds = "{{ get_forecasted_at_work.forecasted_at_work_seconds|default:0 }}" data-run= "{{run|default:1}}" ></span> {% endcomment %}
                     <button
                         class="check checkout"
-                        hx-get="{% url 'clock-out' %}"
-                        hx-target='#attendance-activity-container'
-                        hx-swap='innerHTML'
+                        data-require-selfie="{{ company.face_detection.start|yesno:'1,0,0' }}"
+                        onclick="horillaClockInOut('{{ clock_out_url }}', this.getAttribute('data-require-selfie') === '1'); return false;"
                         {% if enabled_timerunner and get_forecasted_at_work.has_attendance %}
                             onmouseenter="$(this).find('span.hr-Check-In-out-text').show();$(this).find('.time-runner').hide();"
                             onmouseleave="$(this).find('span.hr-Check-In-out-text').hide();$(this).find('.time-runner').show();"
@@ -46,9 +286,8 @@
                     <span class="at_work_seconds" data-at-work-seconds = "{{ get_forecasted_at_work.forecasted_at_work_seconds|default:0 }}" data-run= "{{run|default:0}}" ></span> {% endcomment %}
                     <button
                         class="check checkin"
-                        hx-get="{% url 'clock-in' %}"
-                        hx-target='#attendance-activity-container'
-                        hx-swap='innerHTML'
+                        data-require-selfie="{{ company.face_detection.start|yesno:'1,0,0' }}"
+                        onclick="horillaClockInOut('{{ clock_in_url }}', this.getAttribute('data-require-selfie') === '1'); return false;"
                         {% if enabled_timerunner %}
                             onmouseenter="$(this).find('span.hr-Check-In-out-text').show();$(this).find('.at-work-seconds').hide();"
                             onmouseleave="$(this).find('span.hr-Check-In-out-text').hide();$(this).find('.at-work-seconds').show();"
@@ -70,7 +309,7 @@
                     {% if enabled_timerunner %}
                         <script>
                             $(document).ready(function () {
-                                $('.at-work-seconds').html(secondsToDuration({{get_forecasted_at_work.forecasted_at_work_seconds}}))
+                                $('.at-work-seconds').html(secondsToDuration(parseInt("{{ get_forecasted_at_work.forecasted_at_work_seconds|default:0 }}", 10)))
                             });
                             run = 0
                         </script>
@@ -80,6 +319,7 @@
         {% endif %}
 
     {% endwith %}
+    {% endwith %}
 {% endif %}
 
 {% if enabled_timerunner %}
@@ -87,6 +327,7 @@
     var at_work_seconds = $(".at_work_seconds").data("at-work-seconds");
     var run = $(".at_work_seconds").data("run");
     var whiteLabelCompany = $("#whiteLabelCompany").data("company");
+    var isMobileView = !!(window.matchMedia && window.matchMedia("(max-width: 991px)").matches);
 
     // time-runner
     function secondsToDuration(seconds) {
@@ -108,10 +349,12 @@
         clearInterval(window.timeRunnerInterval);
     }
 
-    $(".time-runner").not("title").html(secondsToDuration(at_work_seconds));
-    $("title.time-runner").html(` ${whiteLabelCompany} | ` + secondsToDuration(at_work_seconds));
+    if (!isMobileView) {
+        $(".time-runner").not("title").html(secondsToDuration(at_work_seconds));
+        $("title.time-runner").html(` ${whiteLabelCompany} | ` + secondsToDuration(at_work_seconds));
+    }
 
-    if (run) {
+    if (run && !isMobileView) {
         window.timeRunnerInterval = setInterval(() => {
             at_work_seconds = parseInt(at_work_seconds) + 1;
             $("div.time-runner").html(secondsToDuration(at_work_seconds));
