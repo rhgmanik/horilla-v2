@@ -365,6 +365,17 @@ function removeId(element, storeKey = "selectedInstances") {
 
     var ignoreCloseUntil = 0;
 
+    function closeMobileOffcanvasSidebar() {
+      try {
+        if (!window.matchMedia || !window.matchMedia("(max-width: 991px)").matches) return;
+        var sidebar = document.getElementById("sidebar");
+        if (sidebar && sidebar.classList.contains("active")) {
+          sidebar.classList.remove("active");
+          document.body.classList.remove("overflow-hidden");
+        }
+      } catch (_) { /* noop */ }
+    }
+
     function closeAll(opts) {
       /* Unified guard: during the brief window after a sidebar-initiated
          htmx request, suppress *any* attempt to close the panel. Even
@@ -525,6 +536,7 @@ function removeId(element, storeKey = "selectedInstances") {
         if (typeof e.stopImmediatePropagation === "function") {
           e.stopImmediatePropagation();
         }
+        closeMobileOffcanvasSidebar();
 
         var href = link.getAttribute("href") || link.getAttribute("hx-get") || "/";
         if (isStandaloneUrl(href)) {
@@ -569,6 +581,7 @@ function removeId(element, storeKey = "selectedInstances") {
           if (isTopDashboard || isSubmenuLink) {
             e.preventDefault();
             e.stopPropagation();
+            closeMobileOffcanvasSidebar();
 
             if (isTopDashboard) {
               closeAll({ force: true });

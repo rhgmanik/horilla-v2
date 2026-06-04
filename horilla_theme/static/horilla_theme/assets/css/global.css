@@ -301,9 +301,84 @@
   opacity: 1;
 }
 
+#sidebarBackdrop {
+  display: none;
+}
+
 @media (max-width: 991px) {
   .check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 9999px;
+  }
+
+  .check .con {
     display: none;
+  }
+
+  .check .date {
+    opacity: 1;
+  }
+
+  .check:hover .date {
+    opacity: 1;
+  }
+
+  .check .date div {
+    display: none;
+  }
+
+  .at_work_seconds {
+    display: none;
+  }
+
+  #sidebar nav {
+    overflow-x: visible !important;
+    overflow-y: auto !important;
+  }
+
+  #sidebar {
+    transform: translateX(-110%);
+    transition: transform 0.25s ease;
+    width: 76px;
+    max-width: 76px;
+  }
+
+  #sidebar.active {
+    transform: translateX(0);
+  }
+
+  #sidebarBackdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 49;
+  }
+
+  #sidebar.active + #sidebarBackdrop {
+    display: block;
+  }
+
+  .oh-topbar {
+    left: 0;
+    width: 100%;
+    transition: left 0.25s ease, width 0.25s ease;
+  }
+
+  #sidebar.active ~ #appShell .oh-topbar {
+    left: 76px;
+    width: calc(100% - 76px);
+  }
+
+  #floating-buttons,
+  .fab-container {
+    display: none !important;
   }
 }
 

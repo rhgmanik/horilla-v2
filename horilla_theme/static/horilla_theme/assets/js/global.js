@@ -64,27 +64,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // SIDEBARModal DSESIGN
 document.addEventListener("DOMContentLoaded", () => {
-  // Toggle any sidebar based on data-sidebar attribute
-  document.querySelectorAll(".toggleSidemenu").forEach((button) => {
-    button.addEventListener("click", () => {
-      const sidebarId = button.getAttribute("data-sidebar");
-      const sidebar = document.getElementById(sidebarId);
+  document.addEventListener("click", (e) => {
+    const toggleBtn = e.target.closest(".toggleSidemenu");
+    if (toggleBtn) {
+      const sidebarId = toggleBtn.getAttribute("data-sidebar");
+      const sidebar = sidebarId ? document.getElementById(sidebarId) : null;
       if (sidebar) {
         sidebar.classList.toggle("active");
-        document.body.classList.toggle("overflow-hidden");
+        document.body.classList.toggle(
+          "overflow-hidden",
+          sidebar.classList.contains("active")
+        );
       }
-    });
-  });
+      return;
+    }
 
-  // Close any sidebar based on data-sidebar attribute
-  document.querySelectorAll(".closeSidemenu").forEach((button) => {
-    button.addEventListener("click", () => {
-      const sidebarId = button.getAttribute("data-sidebar");
-      const sidebar = document.getElementById(sidebarId);
+    const closeBtn = e.target.closest(".closeSidemenu");
+    if (closeBtn) {
+      const sidebarId = closeBtn.getAttribute("data-sidebar");
+      const sidebar = sidebarId ? document.getElementById(sidebarId) : null;
       if (sidebar) {
         sidebar.classList.remove("active");
         document.body.classList.remove("overflow-hidden");
       }
-    });
+    }
   });
 });

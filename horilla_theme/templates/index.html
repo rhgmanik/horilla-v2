@@ -131,22 +131,20 @@
         {% endblock %}
     </head>
 
-    <body x-data="{ sidebarOpen: false }" class="bg-[{{theme_obj.primary_50}}] font-[Inter,_sans-serif] overflow-hidden {% if request.session.theme == 'dark' %}dark{% endif %}">
+    <body x-data="{ sidebarOpen: false }" class="bg-[{{theme_obj.primary_50}}] font-[Inter,_sans-serif] overflow-x-hidden {% if request.session.theme == 'dark' %}dark{% endif %}">
         {% get_current_language_bidi as LANGUAGE_BIDI %}
         {% get_current_language as LANGUAGE_CODE %}
         <div hidden id="statiUrl" data-url='{% static "" %}'></div>
         <span hidden id="whiteLabelCompany" data-company = '{{ white_label_company_name }}'></span>
-        <!-- Include Sidebar -->
-        <div id="sidebar">
-            {% include "horilla_theme/components/sidebar.html" %}
-        </div>
+        {% include "horilla_theme/components/sidebar.html" %}
+        <div id="sidebarBackdrop" class="closeSidemenu" data-sidebar="sidebar"></div>
 
         <div id="floating-buttons">
             {% include "floating_button.html" %}
         </div>
 
         <!-- Main Content -->
-        <div class="ml-[4.7rem] h-screen overflow-auto">
+        <div id="appShell" class="ml-0 lg:ml-[4.7rem] h-screen overflow-auto">
             <div>
                 <!-- Include Header -->
                 <div id="header">
