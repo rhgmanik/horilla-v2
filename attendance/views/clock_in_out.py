@@ -719,54 +719,57 @@ def clock_out(request):
         now = datetime.now().strftime("%H:%M")
         if request.__dict__.get("time"):
             now = request.time.strftime("%H:%M")
-        minimum_hour, start_time_sec, end_time_sec = shift_schedule_today(
-            day=day, shift=shift
-        )
-        attendance = clock_out_attendance_and_activity(
-            employee=employee, date_today=date_today, now=now, out_datetime=datetime_now
-        )
-        if selfie:
-            try:
-                activity = (
-                    AttendanceActivity.objects.filter(employee_id=employee)
-                    .order_by("-id")
-                    .first()
-                )
-                if activity is not None and hasattr(activity, "clock_out_selfie"):
-                    activity.clock_out_selfie = selfie
-                    activity.save()
-            except Exception:
-                pass
-        if attendance:
-            try:
-                early_out_instance = attendance.late_come_early_out.filter(type="early_out")
-                is_night_shift = attendance.is_night_shift()
-                next_date = attendance.attendance_date + timedelta(days=1)
-                if not early_out_instance.exists():
-                    if is_night_shift:
-                        now_sec = strtime_seconds(now)
-                        mid_sec = strtime_seconds("12:00")
+        try:
+            minimum_hour, start_time_sec, end_time_sec = shift_schedule_today(
+                day=day, shift=shift
+            )
+            attendance = clock_out_attendance_and_activity(
+                employee=employee, date_today=date_today, now=now, out_datetime=datetime_now
+            )
+            if selfie:
+                try:
+                    activity = (
+                        AttendanceActivity.objects.filter(employee_id=employee)
+                        .order_by("-id")
+                        .first()
+                    )
+                    if activity is not None and hasattr(activity, "clock_out_selfie"):
+                        activity.clock_out_selfie = selfie
+                        activity.save()
+                except Exception:
+                    logger.exception("Failed to store clock-out selfie.")
+            if attendance:
+                try:
+                    early_out_instance = attendance.late_come_early_out.filter(type="early_out")
+                    is_night_shift = attendance.is_night_shift()
+                    next_date = attendance.attendance_date + timedelta(days=1)
+                    if not early_out_instance.exists():
+                        if is_night_shift:
+                            now_sec = strtime_seconds(now)
+                            mid_sec = strtime_seconds("12:00")
 
-                        if (attendance.attendance_date == date_today) or (
-                            # check is next day mid
-                            mid_sec >= now_sec
-                            and date_today == next_date
-                        ):
+                            if (attendance.attendance_date == date_today) or (
+                                # check is next day mid
+                                mid_sec >= now_sec
+                                and date_today == next_date
+                            ):
+                                early_out(
+                                    attendance=attendance,
+                                    start_time=start_time_sec,
+                                    end_time=end_time_sec,
+                                    shift=shift,
+                                )
+                        elif attendance.attendance_date == date_today:
                             early_out(
                                 attendance=attendance,
                                 start_time=start_time_sec,
                                 end_time=end_time_sec,
                                 shift=shift,
                             )
-                    elif attendance.attendance_date == date_today:
-                        early_out(
-                            attendance=attendance,
-                            start_time=start_time_sec,
-                            end_time=end_time_sec,
-                            shift=shift,
-                        )
-            except Exception:
-                logger.exception("Clock-out succeeded but post-processing failed (early-out).")
+                except Exception:
+                    logger.exception("Clock-out succeeded but post-processing failed (early-out).")
+        except Exception:
+            logger.exception("Clock-out request failed after updating state; returning UI anyway.")
 
         return render(
             request, "attendance/components/in_out_component.html", {"run": 1}
