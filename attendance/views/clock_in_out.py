@@ -7,7 +7,9 @@ This module is used register endpoints to the check-in check-out functionalities
 import ipaddress
 import logging
 
+import numpy as np
 from django.shortcuts import render
+from django.apps import apps
 
 from horilla.http.response import HorillaRedirect
 
@@ -19,6 +21,7 @@ from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from geopy.distance import geodesic
 
 from attendance.methods.utils import (
     activity_datetime,
@@ -43,6 +46,194 @@ from base.context_processors import (
 from base.models import AttendanceAllowedIP, Company, EmployeeShiftDay
 from horilla.decorators import hx_request_required, login_required
 from horilla.horilla_middlewares import _thread_locals
+
+
+def _get_request_value(request, key):
+    if request.method == "POST" and key in request.POST:
+        return request.POST.get(key)
+    return request.GET.get(key)
+
+
+def _is_htmx_request(request):
+    return (request.META.get("HTTP_HX_REQUEST") or "").lower() == "true" or (
+        request.headers.get("HX-Request", "").lower() == "true"
+    )
+
+
+def _request_is_system_clock(request):
+    return bool(getattr(request, "__dict__", {}).get("datetime"))
+
+
+def _get_employee_company(employee):
+    try:
+        work_info = getattr(employee, "employee_work_info", None)
+        return getattr(work_info, "company_id", None)
+    except Exception:
+        return None
+
+
+def _company_has_geofencing_enabled(employee):
+    try:
+        GeoFencing = apps.get_model("geofencing", "GeoFencing")
+    except Exception:
+        return False
+    company = _get_employee_company(employee)
+    if company and hasattr(company, "geo_fencing"):
+        try:
+            return bool(company.geo_fencing and company.geo_fencing.start)
+        except Exception:
+            return False
+    try:
+        global_cfg = GeoFencing.objects.filter(company_id__isnull=True).first()
+        return bool(global_cfg and global_cfg.start)
+    except Exception:
+        return False
+
+
+def _get_geofencing_config(employee):
+    try:
+        GeoFencing = apps.get_model("geofencing", "GeoFencing")
+    except Exception:
+        return None
+    company = _get_employee_company(employee)
+    if company:
+        cfg = GeoFencing.objects.filter(company_id=company).first()
+        if cfg:
+            return cfg
+    return GeoFencing.objects.filter(company_id__isnull=True).first()
+
+
+def _company_has_face_detection_enabled(employee):
+    try:
+        FaceDetection = apps.get_model("facedetection", "FaceDetection")
+    except Exception:
+        return False
+    company = _get_employee_company(employee)
+    if company:
+        cfg = FaceDetection.objects.filter(company_id=company).first()
+        if cfg:
+            return bool(cfg.start)
+    cfg = FaceDetection.objects.filter(company_id__isnull=True).first()
+    return bool(cfg and cfg.start)
+
+
+def _read_uploaded_image(uploaded_file):
+    try:
+        import cv2
+    except Exception:
+        return None
+    try:
+        data = uploaded_file.read()
+        arr = np.frombuffer(data, dtype=np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        return img
+    except Exception:
+        return None
+    finally:
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass
+
+
+def _extract_single_face_gray(image_bgr):
+    try:
+        import cv2
+    except Exception:
+        return None
+    if image_bgr is None:
+        return None
+    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    cascade = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+    faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80))
+    if faces is None or len(faces) != 1:
+        return None
+    x, y, w, h = faces[0]
+    face = gray[y : y + h, x : x + w]
+    try:
+        face = cv2.resize(face, (200, 200))
+    except Exception:
+        return None
+    return face
+
+
+def _selfie_has_face(selfie):
+    image = _read_uploaded_image(selfie)
+    return _extract_single_face_gray(image) is not None
+
+
+def _selfie_matches_employee(selfie, employee):
+    try:
+        import cv2
+    except Exception:
+        return False
+    try:
+        EmployeeFaceDetection = apps.get_model("facedetection", "EmployeeFaceDetection")
+    except Exception:
+        return False
+    ref = EmployeeFaceDetection.objects.filter(employee_id=employee).first()
+    if not ref or not getattr(ref, "image", None):
+        return True
+    selfie_face = _extract_single_face_gray(_read_uploaded_image(selfie))
+    if selfie_face is None:
+        return False
+    try:
+        ref_img = cv2.imread(ref.image.path)
+    except Exception:
+        return False
+    ref_face = _extract_single_face_gray(ref_img)
+    if ref_face is None:
+        return False
+    if not hasattr(cv2, "face"):
+        return False
+    recognizer = cv2.face.LBPHFaceRecognizer_create()
+    recognizer.train([ref_face], np.array([0]))
+    _, confidence = recognizer.predict(selfie_face)
+    return confidence < 80
+
+
+def _enforce_geofencing_for_request(request, employee):
+    if _request_is_system_clock(request) or not _is_htmx_request(request):
+        return None
+    if not _company_has_geofencing_enabled(employee):
+        return None
+    lat = _get_request_value(request, "latitude")
+    lng = _get_request_value(request, "longitude")
+    if not lat or not lng:
+        return HttpResponse(_("Geolocation is required to mark attendance."))
+    try:
+        lat_f = float(lat)
+        lng_f = float(lng)
+    except Exception:
+        return HttpResponse(_("Invalid geolocation values."))
+    cfg = _get_geofencing_config(employee)
+    if not cfg or not cfg.start:
+        return None
+    distance_m = geodesic((cfg.latitude, cfg.longitude), (lat_f, lng_f)).meters
+    if distance_m > cfg.radius_in_meters:
+        return HttpResponse(_("You are outside the allowed geofence radius."))
+    return None
+
+
+def _enforce_face_detection_for_request(request, employee):
+    if _request_is_system_clock(request) or not _is_htmx_request(request):
+        return None
+    if not _company_has_face_detection_enabled(employee):
+        return None
+    try:
+        import cv2  # noqa: F401
+    except Exception:
+        return HttpResponse(_("Face detection server side required opencv instalation"))
+    selfie = request.FILES.get("selfie")
+    if not selfie:
+        return HttpResponse(_("Selfie is required to mark attendance."))
+    if not _selfie_has_face(selfie):
+        return HttpResponse(_("No valid face detected in the selfie."))
+    if not _selfie_matches_employee(selfie, employee):
+        return HttpResponse(_("Face verification failed."))
+    return None
 
 
 def late_come_create(attendance):
@@ -253,6 +444,14 @@ def clock_in(request):
         if request.__dict__.get("datetime"):
             datetime_now = request.datetime
         if employee and work_info is not None:
+            geofence_block = _enforce_geofencing_for_request(request, employee)
+            if geofence_block is not None:
+                return geofence_block
+            face_block = _enforce_face_detection_for_request(request, employee)
+            if face_block is not None:
+                return face_block
+            selfie = request.FILES.get("selfie")
+
             shift = work_info.shift_id
             date_today = date.today()
             if request.__dict__.get("date"):
@@ -297,6 +496,32 @@ def clock_in(request):
                 end_time=end_time_sec,
                 in_datetime=datetime_now,
             )
+            if selfie:
+                try:
+                    activity = (
+                        AttendanceActivity.objects.filter(employee_id=employee)
+                        .order_by("-id")
+                        .first()
+                    )
+                    if activity is not None and hasattr(activity, "clock_in_selfie"):
+                        activity.clock_in_selfie = selfie
+                        activity.save()
+                except Exception:
+                    pass
+
+                if _company_has_face_detection_enabled(employee):
+                    try:
+                        EmployeeFaceDetection = apps.get_model(
+                            "facedetection", "EmployeeFaceDetection"
+                        )
+                        if not EmployeeFaceDetection.objects.filter(
+                            employee_id=employee
+                        ).exists():
+                            EmployeeFaceDetection.objects.create(
+                                employee_id=employee, image=selfie
+                            )
+                    except Exception:
+                        pass
             return render(
                 request, "attendance/components/in_out_component.html", {"run": 1}
             )
@@ -462,6 +687,14 @@ def clock_out(request):
         if request.__dict__.get("datetime"):
             datetime_now = request.datetime
         employee, work_info = employee_exists(request)
+        geofence_block = _enforce_geofencing_for_request(request, employee)
+        if geofence_block is not None:
+            return geofence_block
+        face_block = _enforce_face_detection_for_request(request, employee)
+        if face_block is not None:
+            return face_block
+        selfie = request.FILES.get("selfie")
+
         shift = work_info.shift_id
         date_today = date.today()
         if request.__dict__.get("date"):
@@ -488,6 +721,18 @@ def clock_out(request):
         attendance = clock_out_attendance_and_activity(
             employee=employee, date_today=date_today, now=now, out_datetime=datetime_now
         )
+        if selfie:
+            try:
+                activity = (
+                    AttendanceActivity.objects.filter(employee_id=employee)
+                    .order_by("-id")
+                    .first()
+                )
+                if activity is not None and hasattr(activity, "clock_out_selfie"):
+                    activity.clock_out_selfie = selfie
+                    activity.save()
+            except Exception:
+                pass
         if attendance:
             early_out_instance = attendance.late_come_early_out.filter(type="early_out")
             is_night_shift = attendance.is_night_shift()

@@ -37,6 +37,7 @@ Jinja2
 idna
 lxml
 numpy
+opencv-contrib-python-headless
 oauthlib
 openpyxl
 oscrypto
