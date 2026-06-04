@@ -150,7 +150,24 @@
             });
         }
 
-        function horillaClockInOut(url, requireSelfie) {
+        function horillaClockInOut(triggerElOrUrl, urlOrRequireSelfie, requireSelfieMaybe) {
+            const hasOldSignature = typeof triggerElOrUrl === "string";
+            const triggerEl = hasOldSignature ? null : triggerElOrUrl;
+            const url = hasOldSignature ? triggerElOrUrl : urlOrRequireSelfie;
+            const requireSelfie = hasOldSignature ? !!urlOrRequireSelfie : !!requireSelfieMaybe;
+
+            window.__horillaClockInOutLocks = window.__horillaClockInOutLocks || {};
+            if (window.__horillaClockInOutLocks[url]) {
+                return;
+            }
+            window.__horillaClockInOutLocks[url] = true;
+            try {
+                if (triggerEl) {
+                    triggerEl.setAttribute("aria-busy", "true");
+                    triggerEl.disabled = true;
+                }
+            } catch (e) {}
+
             const target = "#attendance-activity-container";
 
             const getSelfie = requireSelfie
@@ -215,6 +232,15 @@
                 .catch(function (e) {
                     if (e && e.horillaCanceled) return;
                     alert(e && e.message ? e.message : "Failed to mark attendance.");
+                })
+                .finally(function () {
+                    try {
+                        delete window.__horillaClockInOutLocks[url];
+                        if (triggerEl) {
+                            triggerEl.removeAttribute("aria-busy");
+                            triggerEl.disabled = false;
+                        }
+                    } catch (e) {}
                 });
         }
     </script>
@@ -239,7 +265,7 @@
             {% if request|is_check_in_enabled %}
                 <!-- "CHEKING WETHER ITS IS THE CURRENT EMPLOYEES COMPANY OR ALL COMPANY, THEN ONLY SHOWS THE CHECK-IN, CHECK-OUT BUTTON" -->
                 {% if request.user|is_clocked_in and get_forecasted_at_work.has_attendance %}
-                    <button class="oh-btn oh-btn--warning-outline mr-2" {% if enabled_timerunner and get_forecasted_at_work.has_attendance %} onmouseenter="$(this).find('span').show();$(this).find('.time-runner').hide();" onmouseleave="$(this).find('span').hide();$(this).find('.time-runner').show();" {% endif %} data-require-selfie="{{ company.face_detection.start|yesno:'1,0,0' }}" onclick="horillaClockInOut('{{ clock_out_url }}', this.getAttribute('data-require-selfie') === '1'); return false;"><ion-icon class="oh-navbar__clock-icon mr-2 text-warning" name="exit-outline"></ion-icon>
+                    <button class="oh-btn oh-btn--warning-outline mr-2" {% if enabled_timerunner and get_forecasted_at_work.has_attendance %} onmouseenter="$(this).find('span').show();$(this).find('.time-runner').hide();" onmouseleave="$(this).find('span').hide();$(this).find('.time-runner').show();" {% endif %} data-require-selfie="{{ company.face_detection.start|yesno:'1,0,0' }}" onclick="horillaClockInOut(this, '{{ clock_out_url }}', this.getAttribute('data-require-selfie') === '1'); return false;"><ion-icon class="oh-navbar__clock-icon mr-2 text-warning" name="exit-outline"></ion-icon>
                         <span class="hr-Check-In-out-text" {% if enabled_timerunner and get_forecasted_at_work.has_attendance %} style="display: none;" {% endif %}>{% trans "Check-Out" %}</span>
                         {% if get_forecasted_at_work.has_attendance %}
                         <div class="time-runner"></div>
@@ -250,7 +276,7 @@
                     </script>
                 {% else %}
                     <button {% if enabled_timerunner %} onmouseenter="$(this).find('span').show();$(this).find('.at-work-seconds').hide();" onmouseleave="$(this).find('span').hide();$(this).find('.at-work-seconds').show();" {% endif %}
-                        class="oh-btn oh-btn--success-outline mr-2" data-require-selfie="{{ company.face_detection.start|yesno:'1,0,0' }}" onclick="horillaClockInOut('{{ clock_in_url }}', this.getAttribute('data-require-selfie') === '1'); return false;"
+                        class="oh-btn oh-btn--success-outline mr-2" data-require-selfie="{{ company.face_detection.start|yesno:'1,0,0' }}" onclick="horillaClockInOut(this, '{{ clock_in_url }}', this.getAttribute('data-require-selfie') === '1'); return false;"
                         >
                             <ion-icon class="oh-navbar__clock-icon mr-2 text-success" name="enter-outline"></ion-icon>
                         <span class="hr-Check-In-out-text" {% if enabled_timerunner %} style="display: none;" {% endif %}>{% trans "Check-In" %}</span>

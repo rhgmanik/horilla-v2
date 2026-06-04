@@ -160,7 +160,24 @@
             });
         }
 
-        function horillaClockInOut(url, requireSelfie) {
+        function horillaClockInOut(triggerElOrUrl, urlOrRequireSelfie, requireSelfieMaybe) {
+            const hasOldSignature = typeof triggerElOrUrl === "string";
+            const triggerEl = hasOldSignature ? null : triggerElOrUrl;
+            const url = hasOldSignature ? triggerElOrUrl : urlOrRequireSelfie;
+            const requireSelfie = hasOldSignature ? !!urlOrRequireSelfie : !!requireSelfieMaybe;
+
+            window.__horillaClockInOutLocks = window.__horillaClockInOutLocks || {};
+            if (window.__horillaClockInOutLocks[url]) {
+                return;
+            }
+            window.__horillaClockInOutLocks[url] = true;
+            try {
+                if (triggerEl) {
+                    triggerEl.setAttribute("aria-busy", "true");
+                    triggerEl.disabled = true;
+                }
+            } catch (e) {}
+
             const target = "#attendance-activity-container";
 
             const getSelfie = requireSelfie
@@ -225,6 +242,15 @@
                 .catch(function (e) {
                     if (e && e.horillaCanceled) return;
                     alert(e && e.message ? e.message : "Failed to mark attendance.");
+                })
+                .finally(function () {
+                    try {
+                        delete window.__horillaClockInOutLocks[url];
+                        if (triggerEl) {
+                            triggerEl.removeAttribute("aria-busy");
+                            triggerEl.disabled = false;
+                        }
+                    } catch (e) {}
                 });
         }
     </script>
@@ -257,7 +283,7 @@
                     <button
                         class="check checkout"
                         data-require-selfie="{{ company.face_detection.start|yesno:'1,0,0' }}"
-                        onclick="horillaClockInOut('{{ clock_out_url }}', this.getAttribute('data-require-selfie') === '1'); return false;"
+                        onclick="horillaClockInOut(this, '{{ clock_out_url }}', this.getAttribute('data-require-selfie') === '1'); return false;"
                         {% if enabled_timerunner and get_forecasted_at_work.has_attendance %}
                             onmouseenter="$(this).find('span.hr-Check-In-out-text').show();$(this).find('.time-runner').hide();"
                             onmouseleave="$(this).find('span.hr-Check-In-out-text').hide();$(this).find('.time-runner').show();"
@@ -287,7 +313,7 @@
                     <button
                         class="check checkin"
                         data-require-selfie="{{ company.face_detection.start|yesno:'1,0,0' }}"
-                        onclick="horillaClockInOut('{{ clock_in_url }}', this.getAttribute('data-require-selfie') === '1'); return false;"
+                        onclick="horillaClockInOut(this, '{{ clock_in_url }}', this.getAttribute('data-require-selfie') === '1'); return false;"
                         {% if enabled_timerunner %}
                             onmouseenter="$(this).find('span.hr-Check-In-out-text').show();$(this).find('.at-work-seconds').hide();"
                             onmouseleave="$(this).find('span.hr-Check-In-out-text').hide();$(this).find('.at-work-seconds').show();"
