@@ -687,6 +687,10 @@ def clock_out(request):
         if request.__dict__.get("datetime"):
             datetime_now = request.datetime
         employee, work_info = employee_exists(request)
+        if not employee or work_info is None:
+            return HttpResponse(
+                _("You Don't have work information filled or your employee detail neither entered ")
+            )
         geofence_block = _enforce_geofencing_for_request(request, employee)
         if geofence_block is not None:
             return geofence_block
@@ -734,32 +738,35 @@ def clock_out(request):
             except Exception:
                 pass
         if attendance:
-            early_out_instance = attendance.late_come_early_out.filter(type="early_out")
-            is_night_shift = attendance.is_night_shift()
-            next_date = attendance.attendance_date + timedelta(days=1)
-            if not early_out_instance.exists():
-                if is_night_shift:
-                    now_sec = strtime_seconds(now)
-                    mid_sec = strtime_seconds("12:00")
+            try:
+                early_out_instance = attendance.late_come_early_out.filter(type="early_out")
+                is_night_shift = attendance.is_night_shift()
+                next_date = attendance.attendance_date + timedelta(days=1)
+                if not early_out_instance.exists():
+                    if is_night_shift:
+                        now_sec = strtime_seconds(now)
+                        mid_sec = strtime_seconds("12:00")
 
-                    if (attendance.attendance_date == date_today) or (
-                        # check is next day mid
-                        mid_sec >= now_sec
-                        and date_today == next_date
-                    ):
+                        if (attendance.attendance_date == date_today) or (
+                            # check is next day mid
+                            mid_sec >= now_sec
+                            and date_today == next_date
+                        ):
+                            early_out(
+                                attendance=attendance,
+                                start_time=start_time_sec,
+                                end_time=end_time_sec,
+                                shift=shift,
+                            )
+                    elif attendance.attendance_date == date_today:
                         early_out(
                             attendance=attendance,
                             start_time=start_time_sec,
                             end_time=end_time_sec,
                             shift=shift,
                         )
-                elif attendance.attendance_date == date_today:
-                    early_out(
-                        attendance=attendance,
-                        start_time=start_time_sec,
-                        end_time=end_time_sec,
-                        shift=shift,
-                    )
+            except Exception:
+                logger.exception("Clock-out succeeded but post-processing failed (early-out).")
 
         return render(
             request, "attendance/components/in_out_component.html", {"run": 1}
